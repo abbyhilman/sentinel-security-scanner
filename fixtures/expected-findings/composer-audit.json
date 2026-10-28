@@ -1,0 +1,15 @@
+{
+  "advisories": {
+    "sentinel-fixture/demo-lib": [
+      {
+        "advisoryId": "SENTINEL-TEST-ALIAS-0001",
+        "packageName": "sentinel-fixture/demo-lib",
+        "title": "Synthetic Composer advisory for adapter tests",
+        "affectedVersions": "<1.1.0 (synthetic range)",
+        "severity": "LOW",
+        "link": "https://github.com/advisories/SENTINEL-TEST-ALIAS-0001"
+      }
+    ]
+  },
+  "abandoned": []
+}

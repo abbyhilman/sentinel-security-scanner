@@ -1,0 +1,8 @@
+{
+  "name": "sentinel-fixture/php-demo",
+  "require": {
+    "php": ">=8.2",
+    "sentinel-fixture/demo-lib": "1.0.0",
+    "laravel/framework": "^11.0"
+  }
+}

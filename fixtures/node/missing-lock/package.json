@@ -1,0 +1,8 @@
+{
+  "name": "sentinel-fixture/node-without-lock",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "1.0.0"
+  }
+}

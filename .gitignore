@@ -1,0 +1,15 @@
+node_modules/
+.pnpm-store/
+dist/
+coverage/
+.vite/
+.vitest/
+*.tsbuildinfo
+
+.env*
+!.env.example
+supabase/.temp/
+
+.DS_Store
+Thumbs.db
+

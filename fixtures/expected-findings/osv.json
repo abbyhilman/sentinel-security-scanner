@@ -1,0 +1,31 @@
+{
+  "results": [
+    {
+      "source": { "path": "fixtures/php/composer.lock", "type": "lockfile" },
+      "packages": [
+        {
+          "package": {
+            "name": "sentinel-fixture/demo-lib",
+            "version": "1.0.0",
+            "ecosystem": "Packagist"
+          },
+          "vulnerabilities": [
+            {
+              "id": "SENTINEL-TEST-ADVISORY-0001",
+              "aliases": ["SENTINEL-TEST-ALIAS-0001"],
+              "summary": "Synthetic advisory for adapter tests",
+              "details": "This is synthetic test data, not a published advisory.",
+              "database_specific": { "severity": "HIGH" },
+              "references": [
+                {
+                  "type": "WEB",
+                  "url": "https://osv.dev/vulnerability/SENTINEL-TEST-ADVISORY-0001"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

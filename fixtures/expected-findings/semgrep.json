@@ -1,0 +1,19 @@
+{
+  "version": "1.99.0",
+  "results": [
+    {
+      "check_id": "sentinel.test.php.unsafe-query",
+      "path": "fixtures/php/positive.php",
+      "start": { "line": 4, "col": 1, "offset": 100 },
+      "end": { "line": 4, "col": 43, "offset": 142 },
+      "extra": {
+        "message": "Synthetic fixture finding. password=TEST_ONLY_DO_NOT_USE_synthetic_value",
+        "severity": "WARNING",
+        "metadata": {
+          "name": "Synthetic SQL query construction",
+          "references": ["https://semgrep.dev/rules/SENTINEL-TEST-0001"]
+        }
+      }
+    }
+  ]
+}

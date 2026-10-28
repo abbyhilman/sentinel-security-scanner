@@ -1,0 +1,13 @@
+[
+  {
+    "RuleID": "generic-api-key",
+    "Description": "Synthetic token redaction test",
+    "StartLine": 1,
+    "EndLine": 1,
+    "File": "fixtures/node/.env.example",
+    "Match": "API_KEY=TEST_ONLY_DO_NOT_USE_gitleaks_dummy_secret_000000000000",
+    "Secret": "TEST_ONLY_DO_NOT_USE_gitleaks_dummy_secret_000000000000",
+    "Line": "API_KEY=TEST_ONLY_DO_NOT_USE_gitleaks_dummy_secret_000000000000",
+    "Fingerprint": "synthetic-fingerprint-do-not-trust"
+  }
+]
