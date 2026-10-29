@@ -1,8 +1,8 @@
 # Sentinel database data dictionary
 
-**Baseline:** ERD/DBA v1.1, aligned with decisions D-004 through D-006 on 28 October 2026.  
-**Migration:** `supabase/migrations/20261028000100_initial_schema.sql`  
-**Scope:** local schema, tenant read policies, restricted grants, and synthetic development fixtures. No cloud database has been connected.
+**Baseline:** ERD/DBA v1.1, aligned with decisions D-004 through D-006 and D-013 through D-018 on 28 October 2026.
+**Migrations:** `supabase/migrations/20261028000100_initial_schema.sql`, `supabase/migrations/20261028000200_atomic_report_ingestion.sql`
+**Scope:** tenant schema/RLS and Stage 06 atomic ingestion. The initial schema is applied to the linked hosted project; the Stage 06 migration is still pending and has not been pushed.
 
 ## Canonical entities
 
@@ -14,8 +14,8 @@
 | `repositories` | Tenant repository record; GitHub ID may remain null while onboarding is pending. A verified repository requires a GitHub ID. |
 | `repository_pairings` | Hashed one-time pairing nonce, expiry, consumption time, and lifecycle status. Only trusted server functions can read or write it. |
 | `repository_workflows` | Exact workflow identity and optional ref pattern allowlist. User access is read-only. |
-| `scan_runs` | GitHub run/attempt snapshot with commit, ref, event, report schema version, status, and optional payload digest. Run tuple is unique per repository. |
-| `scanner_executions` | Per-run engine status, tool version, elapsed time, counts, skip reason, and ruleset/license provenance. Unique per engine and run. |
+| `scan_runs` | GitHub run/attempt snapshot with commit, ref, event, validated `workflow_ref`, sanitized coverage, report schema version, status, and payload digest. Run tuple is unique per repository. |
+| `scanner_executions` | Per-run engine status, tool version, elapsed time, counts, skip reason, redacted error, and ruleset/license provenance. Unique per engine and run. |
 | `findings` | Immutable finding snapshot per run with stable fingerprint, scanner/rule, category, severity, evidence status, redacted message, and optional HTTPS source link. |
 | `finding_evidence` | Sanitized repository-relative paths, line bounds, bounded redacted excerpt, and optional package/version. |
 | `finding_triage` | Append-only disposition history keyed by repository and fingerprint; only owners and maintainers may append as themselves. |
@@ -54,15 +54,16 @@
 - Authenticated users read organization-scoped rows through RLS membership helpers. A user cannot see another tenant's repositories, scan runs, findings, evidence, triage, dependency inventory, correlations, or artifact metadata.
 - Authenticated users may update only their own `profiles.display_name` and append triage as an owner or maintainer with a matching actor ID. Triages cannot be updated or deleted.
 - Authenticated users cannot insert or mutate scan runs, scanner executions, findings, pairing state, workflow allowlists, receipts, or audit events directly.
-- `service_role` is reserved for trusted Supabase Edge Functions. Never place it in the web bundle or customer-owned workflow.
+- `service_role` cannot directly insert or mutate the Stage 06 ingestion tables; it can execute only the restricted atomic ingestion RPC for this write path. Keep the key in Edge Function secrets, never in the web bundle or customer-owned workflow.
 - `private` schema helpers use `SECURITY DEFINER`, an empty `search_path`, fully qualified objects, and membership joins that avoid RLS recursion. The schema is not included in the PostgREST exposed schemas.
-- Run-level workflow identity is not linked to `scan_runs` yet; resolve D-013 after checking actual GitHub OIDC claims and before Stage 06.
+- `scan_runs.workflow_ref` records the exact workflow claim, and `repository_workflows` allows only the exact workflow/ref established at pairing. The first binding also requires the template path on the configured default branch.
 
 ## Data limits and privacy
 
 - Hash columns validate lower-case SHA-256 hex. Pairing stores only a nonce hash; ingestion stores only payload/claim digests.
 - Evidence paths reject absolute paths, drive prefixes, backslashes, and `..` path segments. Excerpts are capped at 4,096 UTF-8 bytes as a provisional storage bound; confirm the final product limit before release.
-- Finding messages are capped at 4,000 characters; this database constraint does not replace the Stage 04 sanitizer or secret detection.
+- Finding messages and engine errors are capped at 4,000 characters. The ingestion handler redacts common credential formats and rejects sensitive text in identity/path fields; this defense-in-depth does not replace the Stage 04 sanitizer or prove all secrets can be recognized.
+- Coverage is stored as sanitized JSON on `scan_runs`. The version 1 report has no package inventory, so `dependency_inventory` rows are not fabricated from advisory findings.
 - Artifacts contain metadata only. Raw source, full scanner output, matched secrets, bearer tokens, and service keys must not be stored.
 - No retention period is configured in this migration. Retention and deletion policy remain open pending D-011.
 
@@ -71,9 +72,9 @@
 From the repository root, after installing Supabase CLI and starting its local dependencies:
 
 ```powershell
-supabase start
-supabase db reset
-supabase test db
+pnpm exec supabase start
+pnpm exec supabase db reset
+pnpm exec supabase test db
 ```
 
-The user applied migration `20261028000100` to the linked Supabase project using `supabase db push`; `supabase migration list --linked` showed the timestamp on both local and remote. SQL Editor checks confirmed 18/18 tables have RLS enabled, anon cannot use the public schema or read repositories, authenticated cannot directly insert scan runs, and authenticated has the intended triage insert grant. pgTAP is enabled in hosted `extensions`; the user confirmed running the full 20-assertion `tenant_rls_test.sql`, with assertion 20 passing and no error from `finish(true)`. pgTAP emits no finish row when all planned assertions pass, so SQL Editor can continue to show the last assertion result. Hosted policy behavior is **PASS**; Docker and `psql` are not available, so local `db reset` and CLI pgTAP remain **NOT VERIFIED**. Python `tomllib` parsed `supabase/config.toml` successfully. Do not run `supabase/seed.sql` against the hosted project; it contains synthetic local-only accounts.
+The user applied migration `20261028000100` to the linked Supabase project. SQL Editor checks confirmed the 18 Stage 03 tables have RLS enabled and the tenant suite passed. Migration `20261028000200` and `sentinel-ingest` have not been applied/deployed. Docker and Deno are not available locally, so local database/Edge Runtime behavior is **NOT VERIFIED**. Use `pnpm run sentinel:ingest:check` for the isolated Node shell suite; it does not replace a Supabase Edge Runtime or PostgreSQL integration test. Do not run `supabase/seed.sql` against the hosted project; it contains synthetic local-only accounts.

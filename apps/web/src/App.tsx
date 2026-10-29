@@ -1,4 +1,7 @@
 import { Link, Navigate, Route, Routes } from 'react-router';
+import { AuthProvider } from './components/AuthContext';
+import { AuthenticatedArea } from './components/AuthGate';
+import { AuthCallbackPage, LoginPage } from './components/AuthPages';
 import { AppShell } from './components/AppShell';
 import { FindingDetailPage } from './features/findings/FindingDetailPage';
 import { FindingsPage } from './features/findings/FindingsPage';
@@ -24,19 +27,25 @@ function NotFoundPage() {
 
 export function App() {
   return (
-    <Routes>
-      <Route element={<AppShell />}>
-        <Route index element={<Navigate to="/overview" replace />} />
-        <Route path="overview" element={<OverviewPage />} />
-        <Route path="repositories" element={<RepositoriesPage />} />
-        <Route path="repositories/:id" element={<RepositoryDetailPage />} />
-        <Route path="scans/:id" element={<ScanDetailPage />} />
-        <Route path="findings" element={<FindingsPage />} />
-        <Route path="findings/:id" element={<FindingDetailPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Route>
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="login" element={<LoginPage />} />
+        <Route path="auth/callback" element={<AuthCallbackPage />} />
+        <Route element={<AuthenticatedArea />}>
+          <Route element={<AppShell />}>
+            <Route index element={<Navigate to="/overview" replace />} />
+            <Route path="overview" element={<OverviewPage />} />
+            <Route path="repositories" element={<RepositoriesPage />} />
+            <Route path="repositories/:id" element={<RepositoryDetailPage />} />
+            <Route path="scans/:id" element={<ScanDetailPage />} />
+            <Route path="findings" element={<FindingsPage />} />
+            <Route path="findings/:id" element={<FindingDetailPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Route>
+      </Routes>
+    </AuthProvider>
   );
 }

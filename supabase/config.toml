@@ -22,8 +22,18 @@ sql_paths = ["./seed.sql"]
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:4173"
-additional_redirect_urls = ["http://localhost:4173"]
+additional_redirect_urls = [
+  "http://localhost:4173",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+]
 enable_signup = true
 
 [auth.email]
 enable_signup = true
+
+[functions.sentinel-ingest]
+verify_jwt = false
+
+[functions.sentinel-api]
+verify_jwt = true

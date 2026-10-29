@@ -7,6 +7,7 @@ import {
   CircleHelp,
   FileBarChart2,
   LayoutDashboard,
+  LogOut,
   Menu,
   Search,
   Settings2,
@@ -17,6 +18,8 @@ import { Link, NavLink, Outlet, useLocation, useSearchParams } from 'react-route
 import { mockNotice, previewStateOptions } from '../fixtures/mock/data';
 import type { PreviewState } from '../fixtures/mock/types';
 import { PreviewContextProvider } from './PreviewContext';
+import { useAuth } from './AuthContext';
+import { useWorkspace } from './WorkspaceContext';
 
 const primaryLinks = [
   { to: '/overview', label: 'Ringkasan', icon: LayoutDashboard, end: true },
@@ -78,7 +81,7 @@ function BrandWordmark() {
   );
 }
 
-function Sidebar() {
+function Sidebar({ organizationName, isLive }: { organizationName: string; isLive: boolean }) {
   return (
     <aside className="sidebar desktop-sidebar">
       <div className="sidebar-brand">
@@ -86,11 +89,11 @@ function Sidebar() {
       </div>
       <div className="workspace-switcher">
         <div className="workspace-avatar" aria-hidden="true">
-          D
+          {organizationName.slice(0, 1).toUpperCase()}
         </div>
         <div className="workspace-name">
-          <span>Ruang kerja</span>
-          <strong>Demo Sentinel</strong>
+          <span>{isLive ? 'Organisasi' : 'Mode preview'}</span>
+          <strong>{organizationName}</strong>
         </div>
       </div>
       <NavigationLinks />
@@ -99,15 +102,15 @@ function Sidebar() {
           <BookOpenText size={17} aria-hidden="true" />
         </div>
         <div>
-          <strong>Mode pratinjau</strong>
-          <span>Data contoh tersanitasi</span>
+          <strong>{isLive ? 'Data live' : 'Mode pratinjau'}</strong>
+          <span>{isLive ? 'Dari API Sentinel' : 'Data sintetis'}</span>
         </div>
       </div>
     </aside>
   );
 }
 
-function MobileNavigation({ onClose }: { onClose: () => void }) {
+function MobileNavigation({ onClose, isLive }: { onClose: () => void; isLive: boolean }) {
   const drawerRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
 
@@ -185,8 +188,8 @@ function MobileNavigation({ onClose }: { onClose: () => void }) {
             <BookOpenText size={17} aria-hidden="true" />
           </div>
           <div>
-            <strong>Mode pratinjau</strong>
-            <span>Data contoh tersanitasi</span>
+            <strong>{isLive ? 'Data live' : 'Mode pratinjau'}</strong>
+            <span>{isLive ? 'Dari API Sentinel' : 'Data sintetis'}</span>
           </div>
         </div>
       </div>
@@ -206,15 +209,22 @@ function getPageLabel(pathname: string) {
 }
 
 export function AppShell() {
+  const auth = useAuth();
+  const workspace = useWorkspace();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const previewParam = searchParams.get('preview') as PreviewState | null;
-  const previewState = previewStateOptions.some((option) => option.value === previewParam)
-    ? (previewParam as PreviewState)
-    : 'default';
+  const previewState =
+    !auth.configured && previewStateOptions.some((option) => option.value === previewParam)
+      ? (previewParam as PreviewState)
+      : 'default';
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const pageLabel = getPageLabel(location.pathname);
+  const isLive = auth.configured;
+  const organizationName = isLive
+    ? (workspace?.activeOrganization?.name ?? 'Ruang kerja')
+    : 'Demo Sentinel';
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -242,7 +252,7 @@ export function AppShell() {
         <a href="#main-content" className="skip-link">
           Lewati ke konten utama
         </a>
-        <Sidebar />
+        <Sidebar organizationName={organizationName} isLive={isLive} />
         <div className="app-frame">
           <header className="topbar">
             <div className="topbar-left">
@@ -258,7 +268,7 @@ export function AppShell() {
                 <Menu size={20} aria-hidden="true" />
               </button>
               <div className="breadcrumb">
-                <span>Demo Sentinel</span>
+                <span>{organizationName}</span>
                 <span className="breadcrumb-separator" aria-hidden="true">
                   /
                 </span>
@@ -266,22 +276,40 @@ export function AppShell() {
               </div>
             </div>
             <div className="topbar-tools">
-              <label className="preview-control">
-                <Activity size={15} aria-hidden="true" />
-                <span className="sr-only">Pilih kondisi pratinjau</span>
-                <select
-                  aria-label="Pilih kondisi pratinjau"
-                  value={previewState}
-                  onChange={(event) => setPreviewState(event.currentTarget.value as PreviewState)}
-                >
-                  {previewStateOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={14} aria-hidden="true" />
-              </label>
+              {isLive && workspace && workspace.organizations.length > 1 ? (
+                <label className="workspace-control">
+                  <span className="sr-only">Pilih organisasi</span>
+                  <select
+                    aria-label="Pilih organisasi"
+                    value={workspace.activeOrganization?.id ?? ''}
+                    onChange={(event) => workspace.selectOrganization(event.currentTarget.value)}
+                  >
+                    {workspace.organizations.map((organization) => (
+                      <option key={organization.id} value={organization.id}>
+                        {organization.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </label>
+              ) : !isLive ? (
+                <label className="preview-control">
+                  <Activity size={15} aria-hidden="true" />
+                  <span className="sr-only">Pilih kondisi pratinjau</span>
+                  <select
+                    aria-label="Pilih kondisi pratinjau"
+                    value={previewState}
+                    onChange={(event) => setPreviewState(event.currentTarget.value as PreviewState)}
+                  >
+                    {previewStateOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} aria-hidden="true" />
+                </label>
+              ) : null}
               <Link
                 className="icon-button topbar-icon"
                 to="/settings"
@@ -289,31 +317,62 @@ export function AppShell() {
               >
                 <CircleHelp size={18} aria-hidden="true" />
               </Link>
-              <div className="account-avatar" aria-label="Akun demo">
-                D
-              </div>
+              {isLive ? (
+                <>
+                  <div className="account-avatar" aria-label={`Akun ${auth.user?.email ?? ''}`}>
+                    {(auth.user?.email?.slice(0, 1) ?? 'U').toUpperCase()}
+                  </div>
+                  <button
+                    className="icon-button topbar-signout"
+                    type="button"
+                    aria-label="Keluar dari Sentinel"
+                    title="Keluar"
+                    onClick={() => void auth.signOut().catch(() => undefined)}
+                  >
+                    <LogOut size={16} aria-hidden="true" />
+                  </button>
+                </>
+              ) : (
+                <div className="account-avatar" aria-label="Akun demo">
+                  D
+                </div>
+              )}
             </div>
           </header>
 
           <div id="mobile-navigation">
-            {mobileNavOpen && <MobileNavigation onClose={closeMobileNav} />}
+            {mobileNavOpen && <MobileNavigation onClose={closeMobileNav} isLive={isLive} />}
           </div>
 
           <main id="main-content" className="main-content">
-            <div className="demo-banner" role="status">
-              <div className="demo-banner-mark">
-                <Search size={15} aria-hidden="true" />
+            {isLive ? (
+              <div className="live-banner" role="status">
+                <span className="live-indicator" aria-hidden="true" />
+                <p>
+                  <strong>LIVE</strong>
+                  <span>Data berasal dari sesi dan organisasi aktif.</span>
+                </p>
               </div>
-              <p>
-                <strong>Mode pratinjau</strong>
-                <span>{mockNotice}</span>
-              </p>
-              <span className="demo-label">DEMO</span>
-            </div>
+            ) : (
+              <div className="demo-banner" role="status">
+                <div className="demo-banner-mark">
+                  <Search size={15} aria-hidden="true" />
+                </div>
+                <p>
+                  <strong>Mode pratinjau</strong>
+                  <span>{mockNotice}</span>
+                </p>
+                <span className="demo-label">DEMO</span>
+              </div>
+            )}
             <Outlet />
             <footer className="app-footer">
               <span>Sentinel Security Scanner</span>
-              <span>Pratinjau UI · data sintetis</span>
+              <span>
+                {isLive
+                  ? 'Laporan dari workflow CI · hasil tidak diverifikasi independen'
+                  : 'Pratinjau UI · data sintetis'}
+              </span>
             </footer>
           </main>
         </div>

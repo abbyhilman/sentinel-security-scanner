@@ -1,0 +1,4 @@
+title = "Sentinel Gitleaks rules"
+
+[extend]
+useDefault = true

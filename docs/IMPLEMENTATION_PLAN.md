@@ -1,14 +1,16 @@
 # Sentinel Security Scanner Implementation Plan
 
-**Tahap aktif:** 03 — migrations, Auth dan RLS (implementasi disiapkan; eksekusi database belum terverifikasi)  
-**Tanggal pembaruan:** 28 Oktober 2026  
-**Status:** Tahap 00–02 selesai pada workspace lokal di branch master. Migration Tahap 03 berhasil diterapkan pengguna ke Supabase cloud dan history local/remote cocok. Seed dan pgTAP belum dijalankan; RLS belum teruji per tenant. Belum ada commit atau push.
+**Status tahap terakhir:** Source Tahap 07 dan deployment migration `20261028000300_authenticated_api.sql` serta Edge Function `sentinel-api` sudah tersedia. Function aktif dengan `verify_jwt=true`. Gate 07 belum lulus; request user/tenant hosted belum diverifikasi, tenant A/B belum dites, dan dashboard lokal belum dikonfigurasi ke Supabase.
+
+**Tanggal pembaruan:** 29 Oktober 2026
+
+**Status:** Tahap 00–06 memiliki implementasi lokal di branch master. Pengguna menerapkan migration Tahap 03 dan mengonfirmasi seluruh 20 assertion tenant pgTAP lulus. Migration 002 dan Edge Function `sentinel-ingest` juga diterapkan. Tahap 07 kini memiliki source API terautentikasi dan integrasi frontend lokal; typecheck, build, lint, format, dan diff-check lulus pada 29 Oktober. Migration 003 diterapkan dan `sentinel-api` berstatus ACTIVE dengan `verify_jwt=true` menurut CLI. Tenant A/B untuk API, alur hosted Auth/API/pairing, dan koneksi dashboard lokal belum diverifikasi. Workflow GitHub-hosted dan ingestion end-to-end tetap belum diverifikasi. Perubahan Tahap 05–07 belum di-commit atau di-push.
 
 ## Tujuan dan batas rencana
 
 Rencana ini menyusun urutan MVP dari spesifikasi yang tersedia. Produk menjalankan pemindaian source code PHP dan Node.js/TypeScript di GitHub Actions milik pemilik repository, lalu menyimpan temuan yang sudah disanitasi di Supabase dan menampilkannya di dashboard React/Vite. Sentinel tidak menjalankan AI saat runtime.
 
-Tahap 00 menghasilkan rencana; Tahap 01 menyediakan fondasi monorepo; Tahap 02 menyediakan routes, design tokens, komponen, dan state UI mock. Tahap 03 menambahkan skema, grants, RLS, pgTAP test, seed lokal dan data dictionary. Migration berhasil diterapkan ke Supabase cloud, tetapi tes RLS dan tenant isolation belum dilakukan. Aplikasi tetap tidak memanggil GitHub atau Supabase; scanner, workflow scanner, Auth/API dan integrasi produk belum diimplementasikan.
+Tahap 00 menghasilkan rencana; Tahap 01 menyediakan fondasi monorepo; Tahap 02 menyediakan routes, design tokens, komponen, dan state UI mock. Tahap 03 menambahkan skema, grants, RLS, pgTAP test, seed lokal dan data dictionary; migration serta tenant suite hosted dikonfirmasi pengguna. Tahap 04 menyediakan contract dan adapter scanner. Tahap 05 menambahkan workflow owner-installed dan runner terisolasi. Tahap 06 menambahkan validasi OIDC di handler, sanitasi defense-in-depth, pairing, idempotency, serta migration RPC transaksi. Tahap 07 menambahkan auth/session, organisasi, API user, serta mode dashboard LIVE dengan data mock tetap dipakai hanya saat Supabase tidak dikonfigurasi.
 
 ## Sumber yang ditelaah
 
@@ -85,28 +87,28 @@ Dependensi utama: Tahap 03 dan 04 harus menyepakati kontrak sebelum Tahap 06; Ta
 
 ## User stories dan acceptance ringkas
 
-| ID | Pengguna dan kebutuhan | Acceptance |
-|---|---|---|
-| US-01 | Pemilik menghubungkan repository miliknya | Pendaftaran hanya membuat pending; verified setelah OIDC + pairing yang cocok |
-| US-02 | Developer menjalankan scan pada event yang diizinkan | SHA/run/attempt tercatat; tool gagal tidak menghilangkan hasil tool lain |
-| US-03 | Developer menilai evidence | Lokasi, rule/tool, versi, provenance dan status evidence terlihat; secret selalu disensor |
-| US-04 | Reviewer melakukan triage | Perubahan berizin membutuhkan alasan untuk false positive/accepted risk dan menghasilkan history immutable |
-| US-05 | Maintainer memahami coverage | Status tiap engine terlihat; nol temuan tidak berarti repository aman; versi tak diketahui tetap unknown |
-| US-06 | Anggota tenant melihat data sesuai izin | RLS menolak akses baca/tulis antar-organisasi; viewer tidak dapat pairing atau mengubah triage |
+| ID    | Pengguna dan kebutuhan                               | Acceptance                                                                                                 |
+| ----- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| US-01 | Pemilik menghubungkan repository miliknya            | Pendaftaran hanya membuat pending; verified setelah OIDC + pairing yang cocok                              |
+| US-02 | Developer menjalankan scan pada event yang diizinkan | SHA/run/attempt tercatat; tool gagal tidak menghilangkan hasil tool lain                                   |
+| US-03 | Developer menilai evidence                           | Lokasi, rule/tool, versi, provenance dan status evidence terlihat; secret selalu disensor                  |
+| US-04 | Reviewer melakukan triage                            | Perubahan berizin membutuhkan alasan untuk false positive/accepted risk dan menghasilkan history immutable |
+| US-05 | Maintainer memahami coverage                         | Status tiap engine terlihat; nol temuan tidak berarti repository aman; versi tak diketahui tetap unknown   |
+| US-06 | Anggota tenant melihat data sesuai izin              | RLS menolak akses baca/tulis antar-organisasi; viewer tidak dapat pairing atau mengubah triage             |
 
 ## Threat model ringkas
 
-| Ancaman | Dampak | Kontrol minimum |
-|---|---|---|
-| Pengguna mendaftarkan repository orang lain | Klaim ownership palsu | Nama repo bukan bukti; pairing nonce dan klaim OIDC repository_id/workflow |
-| Token OIDC palsu, kedaluwarsa atau salah audience | Ingestion tanpa identitas workflow yang sah | Verifikasi signature, issuer, JWKS, alg allowlist, aud, exp, nbf, iat dan klaim wajib |
-| Replay atau payload berubah untuk run yang sama | Duplikasi atau pengubahan history | Unique repo/run/attempt, digest payload, receipt; replay identik idempotent dan konflik 409 |
-| Laporan dari workflow owner yang dimodifikasi | Temuan dapat direkayasa | Perlakukan JSON sebagai untrusted; tampilkan provenance CI, allowlist workflow/ref; OIDC bukan bukti kebenaran hasil |
-| Secret masuk artifact, log, database atau export | Kebocoran credential | Redact sebelum artifact dan logging, deny pola secret, fixtures sintetis dan pemeriksaan seluruh sink |
-| Kode repository tidak tepercaya dieksekusi | Script berbahaya pada runner/job berizin | Jangan jalankan install/build/test script; pisahkan job scan dan reporter; permission minimum; hindari pull_request_target |
-| Akses lintas tenant | Kebocoran repo/temuan privat | RLS + grants pada semua exposed relation/view, membership checks server-side dan tes negatif tenant |
-| Tool/action/ruleset berbahaya atau lisensinya tak sesuai | Supply-chain, pelanggaran penggunaan | Pin versi/commit, checksum bila sesuai, review asal/lisensi rules secara terpisah |
-| Scanner/API/kuota gagal tetapi UI tampak bersih | Keputusan risiko menyesatkan | Status partial/failed/skipped/unknown eksplisit; tidak ada badge “aman” |
+| Ancaman                                                  | Dampak                                      | Kontrol minimum                                                                                                            |
+| -------------------------------------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Pengguna mendaftarkan repository orang lain              | Klaim ownership palsu                       | Nama repo bukan bukti; pairing nonce dan klaim OIDC repository_id/workflow                                                 |
+| Token OIDC palsu, kedaluwarsa atau salah audience        | Ingestion tanpa identitas workflow yang sah | Verifikasi signature, issuer, JWKS, alg allowlist, aud, exp, nbf, iat dan klaim wajib                                      |
+| Replay atau payload berubah untuk run yang sama          | Duplikasi atau pengubahan history           | Unique repo/run/attempt, digest payload, receipt; replay identik idempotent dan konflik 409                                |
+| Laporan dari workflow owner yang dimodifikasi            | Temuan dapat direkayasa                     | Perlakukan JSON sebagai untrusted; tampilkan provenance CI, allowlist workflow/ref; OIDC bukan bukti kebenaran hasil       |
+| Secret masuk artifact, log, database atau export         | Kebocoran credential                        | Redact sebelum artifact dan logging, deny pola secret, fixtures sintetis dan pemeriksaan seluruh sink                      |
+| Kode repository tidak tepercaya dieksekusi               | Script berbahaya pada runner/job berizin    | Jangan jalankan install/build/test script; pisahkan job scan dan reporter; permission minimum; hindari pull_request_target |
+| Akses lintas tenant                                      | Kebocoran repo/temuan privat                | RLS + grants pada semua exposed relation/view, membership checks server-side dan tes negatif tenant                        |
+| Tool/action/ruleset berbahaya atau lisensinya tak sesuai | Supply-chain, pelanggaran penggunaan        | Pin versi/commit, checksum bila sesuai, review asal/lisensi rules secara terpisah                                          |
+| Scanner/API/kuota gagal tetapi UI tampak bersih          | Keputusan risiko menyesatkan                | Status partial/failed/skipped/unknown eksplisit; tidak ada badge “aman”                                                    |
 
 ## Ketidakpastian dan blocker sebelum implementasi terkait
 
@@ -177,4 +179,27 @@ Dependensi utama: Tahap 03 dan 04 harus menyepakati kontrak sebelum Tahap 06; Ta
 - Deduplikasi advisory hanya berlaku jika package dan ID cocok tanpa konflik path/version yang diketahui; provenance semua scanner dipertahankan. Perbedaan severity menjadi `unknown`.
 - Fixture PHP/Node dan JSON scanner memakai identifier/credential sintetis yang jelas bukan hasil scan aktual.
 - `pnpm check` PASS: format check, ESLint, TypeScript, 23 unit tests, dan production build Vite.
-- Belum menjalankan Semgrep, OSV-Scanner, Gitleaks, atau Composer terhadap fixture. Versi format output dan ruleset produksi masih harus diverifikasi pada Tahap 05.
+- Belum menjalankan Semgrep, OSV-Scanner, Gitleaks, atau Composer terhadap fixture. Output binary dan coverage ruleset awal masih NOT VERIFIED; keputusan ruleset dicatat pada D-015.
+
+## Hasil Tahap 05
+
+**Status lokal: implementasi dan bundle berhasil dibangun. GitHub-hosted runner, output binary scanner, OIDC, dan ingestion: NOT VERIFIED.**
+
+- `templates/github-workflows/sentinel-scan.yml` hanya memicu `push` ke default branch dan `workflow_dispatch` dari default branch; tidak ada pull request trigger. Job scan memiliki `contents: read`; reporter terpisah tanpa checkout hanya memiliki `id-token: write`.
+- Runtime menjalankan Semgrep CE dengan rules Sentinel MIT, OSV-Scanner, Gitleaks, dan Composer Audit tanpa menjalankan install/build/test script repository. Scanner menggunakan container terpisah, read-only mount, batas resource dan waktu, serta output yang tidak dicetak ke log.
+- Hanya report JSON yang dinormalisasi oleh adapter dan schema Tahap 04 yang diunggah. Output JSON mentah Gitleaks dibuat sementara di `$RUNNER_TEMP` dan dihapus; OIDC token serta pairing nonce tidak dimasukkan ke artifact.
+- Aturan Semgrep memakai manifest versi/digest dan runtime memblokir digest yang berubah. Dasar lisensi dan batas coverage awal dicatat pada D-015.
+- `pnpm build:workflow` berhasil menghasilkan `templates/github-workflows/sentinel-runner.mjs` berukuran 230.80 kB dari source adapter. `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, dan `pnpm build` lulus secara lokal; bukti perintah dicatat di gate QA.
+- Workflow belum dicoba pada hosted runner. Komputer ini tidak memiliki Docker atau GitHub CLI; tidak ada run scanner nyata atau validasi klaim OIDC.
+- Endpoint ingestion backend sudah di-deploy setelah migration Tahap 06 diterapkan. Source API user terautentikasi dan dashboard LIVE Tahap 07 tersedia lokal; typecheck serta Vite production build web lulus. Migration 003 dan Edge Function `sentinel-api` telah diterapkan pada 29 Oktober; CLI mengonfirmasi function ACTIVE dengan verifikasi JWT aktif. Frontend preview kini memakai URL dan publishable key lokal, tetapi belum ada login atau request API dengan sesi user dan test tenant A/B. Tidak ada workflow yang dipasang otomatis ke repository target.
+
+## Hasil Tahap 06
+
+**Status: migration 002 dan Edge Function `sentinel-ingest` telah diterapkan ke Supabase berdasarkan output CLI pengguna; SQL pgTAP dan ingestion end-to-end: NOT VERIFIED.**
+
+- `sentinel-ingest` memverifikasi GitHub OIDC RS256 dengan issuer/JWKS statis, audience URL project yang exact, klaim waktu wajib, event yang diizinkan, dan identitas repository/workflow/run/SHA/ref. Token GitHub bukan Supabase JWT; pengecekan platform dinonaktifkan hanya pada fungsi ini dan verifikasi dilakukan di handler.
+- Handler membatasi body 4 MiB, menolak content-type lain, memvalidasi schema report, membandingkan semua klaim ke report, menghitung idempotency key dari repository/run/attempt, menghitung digest body dan claim, menghapus nonce plaintext, serta memberi respons generik.
+- `ingest_scan_report` pada migration baru mengikat pairing hanya dengan nonce hash dan nama/ID repo hasil OIDC, memeriksa workflow allowlist, rate limit sementara 30 report baru/menit/repo, lalu menyimpan scan, coverage, engine, findings/evidence/advisories, receipt dan audit dalam satu transaksi.
+- Run menyimpan `workflow_ref`; evidence path diwajibkan. Composer runner menambahkan path `composer.lock` yang benar-benar dipindai. Report version 1 tidak menyediakan dependency inventory lengkap sehingga tabel inventori tidak direkayasa.
+- `pnpm run sentinel:ingest:check` menjalankan verifier/handler di Node dengan key lokal dan RPC mock; 8 test lulus. Typecheck contracts, ESLint, adapter tests (15), Prettier, reporter `node --check`, dan bundle workflow (231.33 kB) juga lulus. Ini bukan Supabase Edge Runtime atau integration test database.
+- Pengujian SQL pgTAP, klaim OIDC pada GitHub-hosted runner, koneksi runtime Edge ke database, dan ingestion report end-to-end tetap NOT VERIFIED. Pengguna mengonfirmasi migration linked dan deploy Edge Function berhasil; Deno dan Docker tidak tersedia di shell ini.

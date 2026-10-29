@@ -76,6 +76,7 @@ export function StatusPill({
     | FindingTriage
     | 'pending'
     | 'verified'
+    | 'disabled'
     | 'running'
     | 'cancelled'
     | 'rejected';
@@ -99,19 +100,29 @@ export function StatusPill({
                   ? 'Menunggu verifikasi'
                   : status === 'verified'
                     ? 'Terverifikasi'
-                    : status === 'awaiting_report'
-                      ? 'Menunggu laporan'
-                      : status === 'running'
-                        ? 'Berjalan'
-                        : status === 'cancelled'
-                          ? 'Dibatalkan'
-                          : status === 'rejected'
-                            ? 'Ditolak'
-                            : status === 'open'
-                              ? 'Terbuka'
-                              : status === 'acknowledged'
-                                ? 'Diakui'
-                                : 'Sedang ditinjau');
+                    : status === 'disabled'
+                      ? 'Dinonaktifkan'
+                      : status === 'awaiting_report'
+                        ? 'Menunggu laporan'
+                        : status === 'running'
+                          ? 'Berjalan'
+                          : status === 'cancelled'
+                            ? 'Dibatalkan'
+                            : status === 'rejected'
+                              ? 'Ditolak'
+                              : status === 'open'
+                                ? 'Terbuka'
+                                : status === 'acknowledged'
+                                  ? 'Diakui'
+                                  : status === 'investigating'
+                                    ? 'Sedang ditinjau'
+                                    : status === 'false_positive'
+                                      ? 'False positive'
+                                      : status === 'accepted_risk'
+                                        ? 'Risiko diterima'
+                                        : status === 'fixed'
+                                          ? 'Diperbaiki'
+                                          : 'Status tidak diketahui');
 
   return (
     <span className={`status-pill status-${status.replace('_', '-')}`}>
@@ -127,6 +138,8 @@ export function SeverityPill({ severity }: { severity: FindingSeverity }) {
     high: 'Tinggi',
     medium: 'Sedang',
     low: 'Rendah',
+    info: 'Informasi',
+    unknown: 'Tidak diketahui',
   };
 
   return (
@@ -212,6 +225,82 @@ export function LoadingState({ title = 'Memuat data' }: { title?: string }) {
       <div className="loading-caption">
         <LoaderCircle size={16} className="spin-icon" aria-hidden="true" />
         {title}…
+      </div>
+    </div>
+  );
+}
+
+export function FullScreenLoadingState({ title }: { title: string }) {
+  const navigationRows = Array.from({ length: 5 }, (_, index) => index);
+  const metricCards = Array.from({ length: 3 }, (_, index) => index);
+  const resultRows = Array.from({ length: 3 }, (_, index) => index);
+
+  return (
+    <div className="full-screen-loading" role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">{title}, mohon tunggu.</span>
+      <aside className="full-screen-loading-sidebar" aria-hidden="true">
+        <div className="full-screen-loading-brand">
+          <span className="skeleton full-screen-loading-mark" />
+          <span className="skeleton full-screen-loading-wordmark" />
+        </div>
+        <div className="full-screen-loading-workspace">
+          <span className="skeleton full-screen-loading-avatar" />
+          <span className="skeleton full-screen-loading-workspace-copy" />
+        </div>
+        <div className="full-screen-loading-navigation">
+          {navigationRows.map((row) => (
+            <div className="full-screen-loading-navigation-row" key={row}>
+              <span className="skeleton full-screen-loading-navigation-icon" />
+              <span className="skeleton full-screen-loading-navigation-label" />
+            </div>
+          ))}
+        </div>
+        <span className="skeleton full-screen-loading-sidebar-footer" />
+      </aside>
+
+      <div className="full-screen-loading-main">
+        <header className="full-screen-loading-topbar" aria-hidden="true">
+          <span className="skeleton full-screen-loading-breadcrumb" />
+          <span className="skeleton full-screen-loading-topbar-control" />
+        </header>
+        <main className="full-screen-loading-content">
+          <p className="full-screen-loading-caption" aria-hidden="true">
+            <LoaderCircle size={15} className="spin-icon" aria-hidden="true" />
+            {title}…
+          </p>
+          <div className="skeleton full-screen-loading-notice" aria-hidden="true" />
+          <div className="full-screen-loading-page-heading" aria-hidden="true">
+            <div className="full-screen-loading-title-group">
+              <span className="skeleton full-screen-loading-eyebrow" />
+              <span className="skeleton full-screen-loading-title" />
+              <span className="skeleton full-screen-loading-description" />
+            </div>
+            <span className="skeleton full-screen-loading-action" />
+          </div>
+          <div className="full-screen-loading-metrics" aria-hidden="true">
+            {metricCards.map((card) => (
+              <div className="full-screen-loading-metric" key={card}>
+                <span className="skeleton full-screen-loading-metric-icon" />
+                <span className="skeleton full-screen-loading-metric-label" />
+                <span className="skeleton full-screen-loading-metric-value" />
+                <span className="skeleton full-screen-loading-metric-note" />
+              </div>
+            ))}
+          </div>
+          <section className="full-screen-loading-panel" aria-hidden="true">
+            <div className="full-screen-loading-panel-heading">
+              <span className="skeleton full-screen-loading-panel-eyebrow" />
+              <span className="skeleton full-screen-loading-panel-title" />
+            </div>
+            {resultRows.map((row) => (
+              <div className="full-screen-loading-result-row" key={row}>
+                <span className="skeleton full-screen-loading-result-icon" />
+                <span className="skeleton full-screen-loading-result-copy" />
+                <span className="skeleton full-screen-loading-result-status" />
+              </div>
+            ))}
+          </section>
+        </main>
       </div>
     </div>
   );

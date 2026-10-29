@@ -1,0 +1,50 @@
+# Sentinel-authored rules. Keep this file limited to rules reviewed for distribution.
+# SPDX-License-Identifier: MIT
+rules:
+  - id: sentinel.php.dynamic-execution
+    languages:
+      - php
+    severity: WARNING
+    message: Review this dynamic or shell execution call for untrusted input.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: CWE-95
+      license: MIT
+    pattern-either:
+      - pattern: eval($CODE)
+      - pattern: shell_exec($COMMAND)
+      - pattern: exec($COMMAND)
+      - pattern: system($COMMAND)
+
+  - id: sentinel.node.dynamic-code-evaluation
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    message: Review dynamic code evaluation and ensure input is trusted.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: CWE-95
+      license: MIT
+    pattern-either:
+      - pattern: eval($CODE)
+      - pattern: new Function($CODE)
+
+  - id: sentinel.node.shell-command
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    message: Review shell command construction for untrusted input.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: CWE-78
+      license: MIT
+    pattern-either:
+      - pattern: child_process.exec($COMMAND, ...)
+      - pattern: child_process.execSync($COMMAND, ...)
+      - pattern: exec($COMMAND, ...)
+      - pattern: execSync($COMMAND, ...)

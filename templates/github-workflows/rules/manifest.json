@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "license": "MIT",
+  "licenseGate": "approved",
+  "rulesSha256": "10fae8d4669e57777efab9c386c0cf716dbdf5d81d3073cd65e25e616db0379d",
+  "rulesFile": "sentinel-security.yml",
+  "rulesSource": "Sentinel-authored rules; no Semgrep Registry rules are loaded"
+}

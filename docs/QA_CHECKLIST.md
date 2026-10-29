@@ -1,7 +1,7 @@
 # Sentinel Security Scanner QA Checklist
 
-**Tanggal pembaruan:** 28 Oktober 2026  
-**Status saat ini:** Tahap 01–02 tersedia dan pemeriksaan UI lokal yang tercatat lulus. Migration Tahap 03 berhasil diterapkan pengguna ke proyek Supabase cloud dan riwayat migration lokal/remote cocok. Pengujian RLS per tenant dan pgTAP belum dijalankan; Docker dan psql tidak tersedia. Workflow GitHub Actions, scanner, OIDC, Auth/API dan integrasi produk belum diimplementasikan.
+**Tanggal pembaruan:** 29 Oktober 2026
+**Status saat ini:** Implementasi lokal Tahap 01–07 tersedia. Migration Tahap 03 dan 20 assertion tenant pgTAP dikonfirmasi pengguna lulus; migration 002 dan deploy `sentinel-ingest` juga dikonfirmasi. Migration 003 telah diterapkan; `sentinel-api` berstatus ACTIVE dengan `verify_jwt=true`. Typecheck, build, lint, format, dan diff-check lulus. URL Supabase dan publishable key tersimpan di `apps/web/.env.local` (diabaikan Git), lalu web dibangun ulang. Request API memakai sesi user, tenant A/B, konfigurasi Auth provider, dashboard LIVE, dan GitHub-hosted runner belum diverifikasi. Setelah preview dimuat ulang, aplikasi memakai alur Auth Supabase; login belum diuji.
 
 ## Status yang digunakan
 
@@ -179,41 +179,101 @@ GitHub Actions, live Auth, scanner dan layanan Supabase tidak diuji; semua tetap
 
 ## Gate Tahap 03 — database, Auth dan RLS
 
-| Pemeriksaan / artefak | Status | Bukti / catatan |
-| --- | --- | --- |
-| D-004 status run, D-005 entity model, D-006 rules manifest | PASS | Disepakati dan dicatat di `docs/DECISIONS.md` |
-| Migration skema awal | PASS — remote apply | Pengguna menjalankan `pnpm exec supabase db push --linked`; CLI melaporkan migration berhasil diterapkan |
-| Migration history local/remote | PASS | `pnpm exec supabase migration list --linked` menunjukkan `20261028000100` pada local dan remote |
-| RLS enablement 18 tabel | PASS — metadata | Supabase SQL Editor read-only check: `sentinel_tables=18`, `rls_enabled=18`, `without_rls=NULL` |
-| Anonymous schema/table grants | PASS | Supabase SQL Editor: anon schema access `false`, repo SELECT `false` |
-| Authenticated direct-write grants | PASS — privilege layer | Supabase SQL Editor: scan-run INSERT `false`, triage INSERT `true` |
-| Policy behavior dan tenant isolation | PASS — hosted pgTAP | Pengguna menjalankan seluruh skrip terhadap proyek Supabase; 20 assertion direncanakan dan `finish(true)` tidak melempar error |
-| Tenant dan role pgTAP | PASS — hosted manual run | SQL Editor menampilkan assertion terakhir `ok 20`; ketika semua tes terencana lulus, `finish(true)` tidak mengembalikan baris tambahan |
-| Fixture lokal | NOT VERIFIED | `supabase/seed.sql` ditulis; belum dijalankan |
-| Data dictionary | PASS | `docs/DATA_DICTIONARY.md` menjelaskan entity, mappings, status dan akses |
-| Konfigurasi TOML | PASS | `tomllib` berhasil membaca `supabase/config.toml` |
-| `pnpm check` | PASS | Format check, ESLint, TypeScript, 4 unit tests existing dan production build; tidak memvalidasi SQL |
-| Supabase CLI / Docker / psql availability | PARTIAL | CLI tersedia sebagai dependency pnpm; Docker dan psql tidak tersedia |
-| `supabase db push --dry-run` | PASS | Preview menampilkan hanya migration `20261028000100_initial_schema.sql`; tidak mengubah database |
-| `supabase db reset` / `supabase test db` | NOT RUN | Stack lokal memerlukan container runtime; pgTAP RLS tests belum dijalankan |
-| pgTAP extension pada hosted project | PASS — available | Query `pg_extension` mengembalikan `pgtap` pada schema `extensions` |
-| pgTAP tenant suite | PASS — hosted manual run | Pengguna mengonfirmasi seluruh `tenant_rls_test.sql` dijalankan; assertion terakhir `ok 20` dan tidak ada exception dari `finish(true)` |
-| Stage 04 contracts/adapters | PASS terbatas pada contract dan fixture sintetis | Lihat hasil Tahap 04 di bawah; output binary scanner nyata belum diuji |
+| Pemeriksaan / artefak                                      | Status                                           | Bukti / catatan                                                                                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| D-004 status run, D-005 entity model, D-006 rules manifest | PASS                                             | Disepakati dan dicatat di `docs/DECISIONS.md`                                                                                           |
+| Migration skema awal                                       | PASS — remote apply                              | Pengguna menjalankan `pnpm exec supabase db push --linked`; CLI melaporkan migration berhasil diterapkan                                |
+| Migration history local/remote                             | PASS                                             | `pnpm exec supabase migration list --linked` menunjukkan `20261028000100` pada local dan remote                                         |
+| RLS enablement 18 tabel                                    | PASS — metadata                                  | Supabase SQL Editor read-only check: `sentinel_tables=18`, `rls_enabled=18`, `without_rls=NULL`                                         |
+| Anonymous schema/table grants                              | PASS                                             | Supabase SQL Editor: anon schema access `false`, repo SELECT `false`                                                                    |
+| Authenticated direct-write grants                          | PASS — privilege layer                           | Supabase SQL Editor: scan-run INSERT `false`, triage INSERT `true`                                                                      |
+| Policy behavior dan tenant isolation                       | PASS — hosted pgTAP                              | Pengguna menjalankan seluruh skrip terhadap proyek Supabase; 20 assertion direncanakan dan `finish(true)` tidak melempar error          |
+| Tenant dan role pgTAP                                      | PASS — hosted manual run                         | SQL Editor menampilkan assertion terakhir `ok 20`; ketika semua tes terencana lulus, `finish(true)` tidak mengembalikan baris tambahan  |
+| Fixture lokal                                              | NOT VERIFIED                                     | `supabase/seed.sql` ditulis; belum dijalankan                                                                                           |
+| Data dictionary                                            | PASS                                             | `docs/DATA_DICTIONARY.md` menjelaskan entity, mappings, status dan akses                                                                |
+| Konfigurasi TOML                                           | PASS                                             | `tomllib` berhasil membaca `supabase/config.toml`                                                                                       |
+| `pnpm check`                                               | PASS                                             | Format check, ESLint, TypeScript, 4 unit tests existing dan production build; tidak memvalidasi SQL                                     |
+| Supabase CLI / Docker / psql availability                  | PARTIAL                                          | CLI tersedia sebagai dependency pnpm; Docker dan psql tidak tersedia                                                                    |
+| `supabase db push --dry-run`                               | PASS                                             | Preview menampilkan hanya migration `20261028000100_initial_schema.sql`; tidak mengubah database                                        |
+| `supabase db reset` / `supabase test db`                   | NOT RUN                                          | Stack lokal memerlukan container runtime; pgTAP RLS tests belum dijalankan                                                              |
+| pgTAP extension pada hosted project                        | PASS — available                                 | Query `pg_extension` mengembalikan `pgtap` pada schema `extensions`                                                                     |
+| pgTAP tenant suite                                         | PASS — hosted manual run                         | Pengguna mengonfirmasi seluruh `tenant_rls_test.sql` dijalankan; assertion terakhir `ok 20` dan tidak ada exception dari `finish(true)` |
+| Stage 04 contracts/adapters                                | PASS terbatas pada contract dan fixture sintetis | Lihat hasil Tahap 04 di bawah; output binary scanner nyata belum diuji                                                                  |
 
 ## Gate Tahap 04 — contracts, adapters, dan sanitasi
 
-| Pemeriksaan / artefak | Status | Bukti / catatan |
-| --- | --- | --- |
-| Contract report v1 dan schema strict | PASS | Menolak schema version yang tidak dikenal, path absolut/traversal, host referensi di luar allowlist, execution scanner duplikat, dan provenance ruleset approved yang tidak lengkap |
-| Parser Semgrep JSON | PASS — fixture sintetis | Severity ERROR/WARNING/INFO dipetakan konservatif; path dan message dinormalisasi; URL tidak diizinkan dibuang |
-| Parser OSV-Scanner JSON | PASS — fixture sintetis | Package, versi opsional, advisory ID/alias, references, dan status potentially affected diuji |
-| Parser Gitleaks CLI JSON | PASS — fixture sintetis | `Match`, `Secret`, dan `Line` tidak dibaca; dummy secret tidak muncul dalam hasil ter-normalisasi |
-| Parser Composer Audit JSON | PASS — fixture sintetis | Package/advisory/rentang affected dan link dinormalisasi; versi terpasang tidak direkayasa |
-| Sanitizer credential, HTML, path, dan URL | PASS — unit tests | Credential dummy tidak muncul; traversal dan path absolut di luar checkout ditolak; query/fragment dihapus |
-| Coverage PHP/Node, framework hints, nested manifests dan lockfile | PASS — unit tests | Framework dibaca hanya dari dependencies manifest; duplikat path lockfile diabaikan; proyek tanpa lockfile ditandai |
-| Deduplikasi advisory OSV/Composer | PASS — unit tests | Alias beririsan digabung dan sumber scanner dipertahankan; konflik severity menjadi unknown; path monorepo ambigu tetap terpisah |
-| Status laporan completed/partial/failed | PASS — unit tests | Scanner hilang atau skip tak terduga menghasilkan partial; seluruh scanner berlaku gagal menghasilkan failed |
-| `pnpm check` | PASS | Prettier, ESLint, TypeScript, 8 contract tests, 15 adapter tests, dan Vite production build |
-| Keluaran binary scanner pada fixture | NOT VERIFIED | Belum menjalankan Semgrep, OSV-Scanner, Gitleaks, atau Composer; fixtures JSON sintetis menguji parser saja |
-| Fuzz/property test | NOT RUN | Tidak ada property-based test; batas dan kasus negatif utama ditutup oleh unit tests deterministik |
-| Supabase clean local reset dan pgTAP | NOT VERIFIED | Docker tidak tersedia; hosted tenant suite terpisah berstatus PASS menurut konfirmasi pengguna |
+| Pemeriksaan / artefak                                             | Status                  | Bukti / catatan                                                                                                                                                                     |
+| ----------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Contract report v1 dan schema strict                              | PASS                    | Menolak schema version yang tidak dikenal, path absolut/traversal, host referensi di luar allowlist, execution scanner duplikat, dan provenance ruleset approved yang tidak lengkap |
+| Parser Semgrep JSON                                               | PASS — fixture sintetis | Severity ERROR/WARNING/INFO dipetakan konservatif; path dan message dinormalisasi; URL tidak diizinkan dibuang                                                                      |
+| Parser OSV-Scanner JSON                                           | PASS — fixture sintetis | Package, versi opsional, advisory ID/alias, references, dan status potentially affected diuji                                                                                       |
+| Parser Gitleaks CLI JSON                                          | PASS — fixture sintetis | `Match`, `Secret`, dan `Line` tidak dibaca; dummy secret tidak muncul dalam hasil ter-normalisasi                                                                                   |
+| Parser Composer Audit JSON                                        | PASS — fixture sintetis | Package/advisory/rentang affected dan link dinormalisasi; versi terpasang tidak direkayasa                                                                                          |
+| Sanitizer credential, HTML, path, dan URL                         | PASS — unit tests       | Credential dummy tidak muncul; traversal dan path absolut di luar checkout ditolak; query/fragment dihapus                                                                          |
+| Coverage PHP/Node, framework hints, nested manifests dan lockfile | PASS — unit tests       | Framework dibaca hanya dari dependencies manifest; duplikat path lockfile diabaikan; proyek tanpa lockfile ditandai                                                                 |
+| Deduplikasi advisory OSV/Composer                                 | PASS — unit tests       | Alias beririsan digabung dan sumber scanner dipertahankan; konflik severity menjadi unknown; path monorepo ambigu tetap terpisah                                                    |
+| Status laporan completed/partial/failed                           | PASS — unit tests       | Scanner hilang atau skip tak terduga menghasilkan partial; seluruh scanner berlaku gagal menghasilkan failed                                                                        |
+| `pnpm check`                                                      | PASS                    | Prettier, ESLint, TypeScript, 8 contract tests, 15 adapter tests, dan Vite production build                                                                                         |
+| Keluaran binary scanner pada fixture                              | NOT VERIFIED            | Belum menjalankan Semgrep, OSV-Scanner, Gitleaks, atau Composer; fixtures JSON sintetis menguji parser saja                                                                         |
+| Fuzz/property test                                                | NOT RUN                 | Tidak ada property-based test; batas dan kasus negatif utama ditutup oleh unit tests deterministik                                                                                  |
+| Supabase clean local reset dan pgTAP                              | NOT VERIFIED            | Docker tidak tersedia; hosted tenant suite terpisah berstatus PASS menurut konfirmasi pengguna                                                                                      |
+
+## Gate Tahap 05 — owner-installed workflow
+
+| Pemeriksaan / artefak                                  | Status               | Bukti / catatan                                                                                                     |
+| ------------------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Trigger workflow dan default branch                    | PASS — static review | Hanya `push` dan `workflow_dispatch`; job menolak ref selain default branch; tidak ada pull request trigger         |
+| Permissions dan pemisahan job                          | PASS — static review | Scan `contents: read`; reporter tanpa checkout hanya `id-token: write`                                              |
+| Action refs dan tool versions                          | PASS — pinned        | Action memakai commit SHA terverifikasi; image scanner menggunakan tag versi eksplisit                              |
+| Semgrep license gate                                   | PASS — static review | Hanya rules Sentinel MIT; manifest dan runtime mengikat ruleset ke SHA-256 yang disetujui; lisensi dicatat di D-015 |
+| Isolasi scanner, timeout, dan output cap               | PASS — static review | Container per tool, source read-only, batas resource/jaringan, log scanner dibuang, batas stdout/artifact           |
+| Sanitized report dan artifact                          | PASS — static review | Parser/schema Tahap 04; artifact hanya report JSON; output mentah Gitleaks dihapus dari runner temp                 |
+| Build runner bundle                                    | PASS                 | `pnpm build:workflow` berhasil membangun bundle runner dari source adapter (230.80 kB)                              |
+| Format check                                           | PASS                 | `pnpm format:check`                                                                                                 |
+| Lint                                                   | PASS                 | `pnpm lint`                                                                                                         |
+| Typecheck                                              | PASS                 | `pnpm typecheck`                                                                                                    |
+| Build web                                              | PASS                 | `pnpm build`                                                                                                        |
+| JavaScript syntax runner dan reporter                  | PASS                 | `node --check` pada runner dan script reporter inline                                                               |
+| YAML parse/format                                      | PASS                 | Diperiksa oleh Prettier lewat `pnpm format:check`; validasi schema pada GitHub belum diverifikasi                   |
+| Eksekusi binary scanner pada repo fixture              | NOT VERIFIED         | Docker CLI tidak tersedia lokal dan tidak ada workflow fixture yang dijalankan                                      |
+| GitHub-hosted runner dan YAML action schema            | NOT VERIFIED         | Workflow belum dijalankan pada GitHub; Prettier hanya memeriksa parse/format YAML                                   |
+| Reporter OIDC, pairing nonce, dan Supabase ingestion   | NOT VERIFIED         | Implementasi handler/RPC ada pada Tahap 06; belum di-deploy atau diuji terhadap database linked                     |
+| Deploy atau pemasangan workflow ke repository pengguna | NOT DONE             | Workflow template tidak didorong atau dipasang otomatis                                                             |
+
+## Gate Tahap 06 — OIDC ingestion dan atomic RPC
+
+| Pemeriksaan / artefak                                   | Status               | Bukti / catatan                                                                                      |
+| ------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
+| GitHub issuer/JWKS tetap dan RS256 saja                 | PASS — local unit    | JWKS endpoint dipatok; RSA key fixture menandatangani token test                                     |
+| Audience, issuer, `exp` / `nbf` / `iat`, klaim wajib    | PASS — local unit    | Token audience salah/kedaluwarsa/algoritma non-RS256 ditolak; GitHub-hosted claim belum diuji        |
+| Report identity cocok dengan OIDC                       | PASS — local unit    | Mismatch SHA ditolak sebelum RPC mock dipanggil                                                      |
+| Body 4 MiB, content-type, schema dan idempotency header | PASS — local unit    | Ukuran berlebih ditolak sebelum verifikasi token; suite memeriksa key run tuple                      |
+| Redaksi credential tambahan dan nonce tidak diteruskan  | PASS — local unit    | Secret fixture diredaksi; hanya nonce SHA-256 diteruskan ke mock RPC                                 |
+| Pairing, workflow allowlist, exact replay/conflict      | NOT VERIFIED         | Migration 002 telah diterapkan menurut output CLI pengguna; assertion SQL tahap ini belum dijalankan |
+| Atomic insert dan tidak ada partial write               | NOT VERIFIED         | `sentinel_ingest_test.sql` tersedia; PostgreSQL tidak tersedia lokal tanpa Docker                    |
+| Service role hanya memakai RPC untuk ingestion tables   | PASS — static review | Migration mencabut direct DML dan membatasi RPC; privilege runtime belum diverifikasi                |
+| Rate limit repository                                   | NOT VERIFIED         | Implementasi sementara 30 laporan baru/menit; perlu uji concurrent di PostgreSQL                     |
+| `pnpm run sentinel:ingest:check`                        | PASS                 | 8 tes Node/Vitest lulus tanpa Docker, Deno, credential, atau DB                                      |
+| Migration linked dan Edge Function hosted               | PASS — apply/deploy  | Pengguna mengonfirmasi `db push --linked` dan deploy `sentinel-ingest` berhasil                      |
+| Workflow GitHub-hosted dan ingestion end-to-end         | NOT VERIFIED         | Belum ada run workflow target yang dikonfirmasi                                                      |
+
+## Gate Tahap 07 — authenticated API dan dashboard
+
+| Pemeriksaan / artefak                               | Status                    | Bukti / catatan                                                                                                                                            |
+| --------------------------------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kontrak, migration, dan source API user             | PASS — applied/deployed   | Migration 003 diterapkan; `sentinel-api` berstatus ACTIVE dan `verify_jwt=true` menurut output CLI                                                         |
+| User JWT pada Auth/PostgREST dan RLS                | NOT VERIFIED              | Source meneruskan bearer user; belum ada request hosted atau tenant A/B test                                                                               |
+| Auth provider, session expiry, dan route guard      | PASS — source + typecheck | Supabase Auth, login OAuth/email, session expiry, onboarding organisasi, dan route guard terimplementasi; provider hosted belum diverifikasi               |
+| UI pairing dan instruksi workflow                   | PASS — source + typecheck | Endpoint pairing ter-deploy; nonce hanya disimpan di memori tab. Pairing hosted pertama belum dijalankan                                                   |
+| Halaman dashboard LIVE dan data state               | PASS — typecheck/build    | Overview, repository, scan, findings, reports, dan settings memakai API saat konfigurasi tersedia; skeleton/error/empty state tersedia                     |
+| Mode MOCK vs LIVE                                   | PASS — static review      | MOCK tetap digunakan bila Supabase tidak dikonfigurasi; banner LIVE tampil saat konfigurasi aktif                                                          |
+| `pnpm --filter @sentinel/web typecheck`             | PASS                      | TypeScript strict pada aplikasi web lulus, 29 Oktober 2026                                                                                                 |
+| `pnpm --filter @sentinel/web build`                 | PASS                      | Vite production build lulus; ada peringatan ukuran chunk JS >500 kB                                                                                        |
+| `pnpm lint` dan `pnpm format:check`                 | PASS                      | ESLint dan Prettier lulus pada workspace                                                                                                                   |
+| Supabase migration 003 dry-run                      | PASS — dry-run            | Perintah hanya mengusulkan `20261028000300_authenticated_api.sql`; database tidak diubah                                                                   |
+| Supabase migration 003 apply                        | PASS — CLI                | `db push --linked` menerapkan migration; `migration list --linked` mengonfirmasi timestamp lokal dan remote sama                                           |
+| Edge Function `sentinel-api` deployment             | PASS — CLI                | `functions list` menunjukkan ACTIVE, versi 1, dan `verify_jwt=true`                                                                                        |
+| Preview web lokal                                   | PASS                      | Build Vite berhasil dengan URL dan publishable key lokal dari `apps/web/.env.local`; muat ulang `http://127.0.0.1:4173/` untuk melihat alur login Supabase |
+| Tenant A/B API dan database integration             | NOT RUN                   | Perlu test dengan sesi dua tenant; tidak dibuktikan oleh pgTAP Tahap 03                                                                                    |
+| Request hosted dengan sesi user dan pairing pertama | NOT VERIFIED              | Function aktif, tetapi belum ada request API memakai sesi user atau run pairing pertama                                                                    |
+| Dashboard LIVE hosted                               | NOT VERIFIED              | Konfigurasi frontend lokal sudah ada, tetapi Auth redirect/provider, login, dan request API menggunakan sesi user belum diverifikasi                       |

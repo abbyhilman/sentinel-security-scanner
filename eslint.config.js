@@ -4,7 +4,13 @@ import tseslint from 'typescript-eslint';
 
 export default [
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**', '**/.vite/**'],
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/coverage/**',
+      '**/.vite/**',
+      'templates/github-workflows/sentinel-runner.mjs',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

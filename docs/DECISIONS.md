@@ -27,10 +27,12 @@
 
 ## D-003 — Trigger workflow dan fork pull request
 
-**Status:** Rekomendasi untuk diselaraskan sebelum Tahap 05  
-**Temuan:** BRD/PRD membuka kemungkinan trigger PR dengan kebijakan aman; TDD meminta menghindari kredensial pada fork dan menjalankan hanya trusted events atau melewati report. Playbook Tahap 05 menetapkan workflow_dispatch dan push ke default branch serta melarang pull_request_target P0.  
-**Rekomendasi:** gunakan workflow_dispatch + push ke default branch untuk baseline P0. Jangan kirim report dengan permission OIDC dari pull request fork sampai threat model dan trigger policy ditetapkan.  
-**Risiko jika dibiarkan:** secret/identity dapat terekspos ke kode yang tidak dipercaya, atau scan dan report bisa terikat ke event/repository yang salah.
+**Status:** Disepakati untuk baseline Tahap 05 pada 28 Oktober 2026
+
+**Temuan:** BRD/PRD membuka kemungkinan trigger PR dengan kebijakan aman; TDD meminta menghindari kredensial pada fork dan menjalankan hanya trusted events atau melewati report. Playbook Tahap 05 menetapkan workflow_dispatch dan push ke default branch serta melarang pull_request_target P0.
+
+**Keputusan:** workflow menggunakan workflow_dispatch dan push ke default branch saja; tidak ada pull_request atau pull_request_target. Reporter OIDC hanya berjalan sebagai job terpisah setelah scan berhasil. Perluasan trigger memerlukan tinjauan ulang kebijakan fork dan kredensial.
+**Alasan:** menjaga baseline P0 pada trusted events dan menghindari kredensial report pada kode pull request yang belum ditinjau.
 
 ## D-004 — Status run
 
@@ -99,10 +101,11 @@
 
 ## D-013 — Provenance workflow pada setiap run
 
-**Status:** Terbuka sebelum Tahap 06  
+**Status:** Disepakati untuk Tahap 06 pada 28 Oktober 2026
 **Temuan:** ERD menyimpan `repository_workflows` sebagai allowlist, tetapi `scan_runs` tidak memiliki kolom/relasi yang menyatakan workflow mana yang menghasilkan setiap run. TDD meminta `workflow_ref` diverifikasi terhadap allowlist dan report/run context.  
-**Rekomendasi:** sebelum ingestion dibuat, verifikasi bentuk klaim GitHub yang tersedia dan putuskan apakah `scan_runs` perlu menyimpan workflow identity yang sudah divalidasi. Jika disimpan, gunakan claim terpilih yang telah disanitasi; jangan pernah menyimpan JWT mentah.  
-**Risiko jika dibiarkan:** dashboard dan audit sulit menunjukkan workflow spesifik yang mengirim laporan ketika satu repository memiliki lebih dari satu workflow yang diizinkan.
+**Keputusan:** tambahkan `scan_runs.workflow_ref` dan wajibkan kecocokan exact dengan claim OIDC serta `repository_workflows.allowed_workflow_ref`. Pairing awal menerima hanya `.github/workflows/sentinel-scan.yml` pada default branch yang dikonfigurasi. Simpan claim identity digest saja dalam receipt; JWT mentah tidak pernah dikirim ke SQL.
+**Alasan:** setiap run harus mempertahankan provenance yang sudah diverifikasi tanpa membuka jalur untuk workflow lain dalam repo.
+**Risiko tersisa:** pairing API Tahap 07 belum dibuat. Perubahan nama file workflow atau default branch memerlukan pembaruan allowlist yang terautentikasi.
 
 ## D-014 — Pemetaan kontrak scanner dan agregasi advisory
 
@@ -112,14 +115,66 @@
 **Aturan deduplikasi:** gabungkan hanya SCA dengan ecosystem/package yang sama, advisory ID yang beririsan, versi yang kompatibel, path yang kompatibel, dan tepat satu kandidat. OSV menjadi finding utama jika tersedia. Konflik severity menjadi `unknown`; bukti yang tidak pasti tidak dinaikkan menjadi konfirmasi. Jika satu advisory cocok ke beberapa path monorepo, pertahankan finding terpisah.
 **Normalisasi severity:** Semgrep `ERROR/WARNING/INFO` dipetakan deterministik ke `high/medium/info`; OSV dan Composer mempertahankan severity hanya jika sumber memberi label kanonis; label yang tidak dikenal dan seluruh severity Gitleaks menjadi `unknown`. Pemetaan ini bukan skor CVSS atau klaim eksploitasi.
 **Alasan:** report API mengikuti TDD tanpa mengganti skema remote yang sudah diterapkan, sambil mempertahankan asal tiap engine saat ingestion.
-**Risiko tersisa:** mapper dan fan-out belum diimplementasikan sampai Tahap 06; kontrak harus menjadi input wajib untuk tes ingestion dan rekonsiliasi hitungan.
+**Risiko tersisa:** fan-out dan mapper diimplementasikan di RPC Tahap 06; integration test SQL dan contoh temuan advisory masih harus dijalankan pada database sesudah migrasi.
+
+## D-015 — lisensi dan distribusi rules Semgrep
+
+**Status:** Disepakati 28 Oktober 2026
+
+**Temuan:** Lisensi engine Semgrep CE dan lisensi rules Semgrep Community/Registry adalah dua hal terpisah. Ketentuan rules Semgrep membatasi penggunaan rules Registry pada produk SaaS. Memasukkan rules tersebut ke Sentinel berisiko membuat aturan tersedia melalui layanan pemindai.
+**Keputusan:** Template hanya memakai aturan buatan Sentinel sendiri, berlisensi MIT, tanpa rule pack Registry. Manifest mencatat versi dan SHA-256. Runtime membandingkan digest file dengan digest yang disetujui di bundle; mismatch memblokir Semgrep dan menandai engine gagal sampai perubahan ditinjau.
+**Alasan:** distribusi rules dapat ditinjau, dilisensikan, dan dilacak terpisah dari engine.
+**Risiko tersisa:** rules awal masih mencakup pola terbatas dan tidak membuktikan semua celah terdeteksi. Penambahan atau perubahan rule memerlukan review lisensi, perilaku, versi, dan digest sebelum dipakai. Ketentuan resmi: [Semgrep Rules License](https://semgrep.dev/legal/rules-license/).
+
+## D-016 — cara distribusi workflow scanner
+
+**Status:** Disepakati untuk Tahap 05 pada 28 Oktober 2026
+
+**Temuan:** Workflow dan konfigurasi scanner harus dimiliki maintainer repository yang dipindai. Pilihan reusable workflow akan menambah dependensi runtime pada repository Sentinel dan mengurangi keterlihatan file yang menentukan pemindaian.
+
+**Keputusan:** distribusikan salinan YAML beserta runner, konfigurasi, manifest, lisensi rules, dan third-party notices. Pembaruan template dipasang dan direview secara eksplisit oleh maintainer repository target; tidak ada auto-push.
+**Alasan:** pemilik target dapat meninjau versi tools, rules, izin, dan perubahan workflow pada commit mereka sendiri.
+**Risiko tersisa:** salinan di repository target dapat tertinggal dari template. Maintainer harus menghapus secret nonce setelah pairing pertama.
+
+## D-017 — Audience token GitHub OIDC untuk fungsi ingestion
+
+**Status:** Keputusan implementasi Tahap 06; konflik teks TDD dicatat
+**Temuan:** contoh audience pada TDD menyebut `sentinel-ingest`, sedangkan workflow Tahap 05 meminta audience berbentuk URL fungsi project Supabase.
+**Keputusan:** gunakan audience exact `https://<project-ref>.supabase.co/functions/v1/sentinel-ingest`, sama dengan nilai yang diminta template workflow. Verifier menolak audience lain dan menerima hanya string audience tunggal yang persis cocok.
+**Alasan:** token dibatasi untuk project dan fungsi tujuan, serta tetap cocok dengan workflow yang telah disiapkan.
+**Risiko tersisa:** contoh TDD sumber belum diperbarui; klaim audience live dari GitHub-hosted runner belum diuji.
+
+## D-018 — Batas request ingestion awal
+
+**Status:** Nilai implementasi sementara Tahap 06
+**Keputusan:** batas body 4 MiB, maksimal 1.000 findings dari kontrak report, dan maksimal 30 report baru per repository per menit. Exact replay tidak memakai kuota baru. Batas per menit ditegakkan dalam transaksi PostgreSQL setelah row repository dikunci.
+**Alasan:** batas mencegah payload/ingestion berlebihan tanpa membatasi idempotent retry.
+**Risiko tersisa:** nilai ini provisional dan perlu dikalibrasi terhadap ukuran report, kuota Supabase, dan pemakaian nyata sebelum beta; jangan dianggap sebagai SLA.
+
+## D-019 — input branch dan batas onboarding Tahap 07
+
+**Status:** Keputusan implementasi sementara, 28 Oktober 2026
+
+**Temuan:** Kontrak pendaftaran repository pada TDD hanya meminta `organizationId` dan `fullName`, tetapi RPC ingestion Tahap 06 mensyaratkan `default_branch` sebelum pairing pertama. Mengambil metadata repository dari GitHub akan menambah probe eksternal yang tidak diperlukan dan tidak bekerja untuk repo privat tanpa integrasi OAuth tambahan.
+
+**Keputusan:** API meminta maintainer menyertakan `defaultBranch` sebagai nilai setup yang dideklarasikan pengguna; UI tidak menyebutnya telah diverifikasi oleh GitHub. Pairing menghasilkan nonce acak 256-bit, menyimpan hanya SHA-256, berlaku 15 menit, dan mengganti challenge pending sebelumnya. Batasi pendaftaran menjadi 10 repository per pengguna dalam 24 jam.
+
+Pendaftaran pending dengan nama yang sama di organisasi berbeda tidak saling memblokir; nama baru dianggap sudah terikat hanya setelah ada GitHub repository ID hasil pairing. Duplikasi pending dalam satu organisasi tetap ditolak oleh constraint database.
+
+**Risiko tersisa:** Branch yang dideklarasikan belum dibandingkan dengan konfigurasi default branch GitHub yang sebenarnya. OIDC pairing hanya membuktikan workflow berjalan dari branch/ref yang cocok dengan input ini. Batas onboarding 10/24 jam provisional.
+
+## D-020 — read model ringkasan dan inbox organisasi
+
+**Status:** Keputusan implementasi Tahap 07, 28 Oktober 2026
+
+**Temuan:** PRD/FSD mensyaratkan ringkasan dan inbox temuan lintas repository, sedangkan katalog TDD hanya merinci history per repository dan findings per run.
+
+**Keputusan:** Tambahkan read endpoint organisasi untuk overview dan findings lintas repo agar dashboard P0 tidak menggabungkan halaman terpisah atau menampilkan angka perkiraan. Semua endpoint tetap dibatasi membership, memakai RLS/user JWT, dan paginasi maksimum 100. Export JSON tetap ditunda karena prioritas P0/P1 masih terbuka pada D-007.
 
 ## Keputusan yang masih terbuka
 
-1. Bentuk persis klaim OIDC yang tersedia pada workflow pelapor, workflow/ref allowlist, dan D-013.
-2. Distribusi workflow: copied YAML atau reusable workflow yang commit-pinned.
-3. Kebijakan private repository dan perpindahan kepemilikan.
-4. Ruleset yang disetujui, versi tool/action, payload/rate limits, excerpt limit final, dan retention/backup.
-5. Prioritas JSON/SARIF export.
+1. Kebijakan private repository dan perpindahan kepemilikan.
+2. Penambahan rules Semgrep setelah D-015, versi tool/action untuk rilis, kalibrasi payload/rate limits, excerpt limit final, dan retention/backup.
+3. Prioritas JSON/SARIF export.
 
 Tidak ada konflik yang diselesaikan diam-diam. Pembaruan ke spesifikasi sumber harus mengikuti keputusan pemilik produk/engineering dan review keamanan.

@@ -4,8 +4,18 @@ import { getRepository } from '../fixtures/mock/data';
 import type { FindingFixture } from '../fixtures/mock/types';
 import { SeverityPill } from './ui';
 
-export function FindingSummary({ finding }: { finding: FindingFixture }) {
+export function FindingSummary({
+  finding,
+  repositoryFullName,
+}: {
+  finding: FindingFixture;
+  repositoryFullName?: string;
+}) {
   const repository = getRepository(finding.repositoryId);
+  const repoName =
+    repositoryFullName ??
+    finding.repositoryFullName ??
+    (repository ? `${repository.owner}/${repository.name}` : 'Repositori');
 
   return (
     <Link className="finding-summary" to={`/findings/${finding.id}`}>
@@ -14,7 +24,7 @@ export function FindingSummary({ finding }: { finding: FindingFixture }) {
         <div className="finding-summary-copy">
           <strong>{finding.title}</strong>
           <span>
-            {repository?.owner}/{repository?.name} · {finding.path}:{finding.line || '—'}
+            {repoName} · {finding.path}:{finding.line || '—'}
           </span>
         </div>
       </div>

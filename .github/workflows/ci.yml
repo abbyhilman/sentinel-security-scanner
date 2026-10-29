@@ -43,3 +43,9 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Build owner-installed workflow runtime
+        run: pnpm build:workflow
+
+      - name: Check generated workflow runtime
+        run: git diff --exit-code -- templates/github-workflows/sentinel-runner.mjs
