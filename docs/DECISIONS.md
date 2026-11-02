@@ -171,6 +171,16 @@ Pendaftaran pending dengan nama yang sama di organisasi berbeda tidak saling mem
 
 **Keputusan:** Tambahkan read endpoint organisasi untuk overview dan findings lintas repo agar dashboard P0 tidak menggabungkan halaman terpisah atau menampilkan angka perkiraan. Semua endpoint tetap dibatasi membership, memakai RLS/user JWT, dan paginasi maksimum 100. Export JSON tetap ditunda karena prioritas P0/P1 masih terbuka pada D-007.
 
+## D-021 — arah CLI lokal
+
+**Status:** arahan pengguna, 2 November 2026
+
+**Temuan:** baseline PRD/FSD memakai GitHub Actions dan dashboard. Pengguna kini meminta scanner yang bisa dipakai dari terminal setelah clone, tanpa konfigurasi GitHub atau Supabase.
+
+**Keputusan:** antarmuka utama bergeser ke CLI lokal. Iterasi pertama adalah pemeriksaan pola cepat tanpa dependensi npm atau layanan cloud. Hasilnya memakai `mode: local-quick` dan `coverage: limited`; tidak boleh diberi identitas GitHub/OIDC atau diklaim sebagai hasil Semgrep, OSV-Scanner, Gitleaks, maupun Composer Audit. CLI tidak mengirim report ke cloud. Source dashboard dan workflow lama dipertahankan sementara sampai pengganti lokal memiliki cakupan yang setara dan dapat diuji.
+
+**Risiko tersisa:** pemeriksaan pola teks dapat menghasilkan false positive dan melewatkan kerentanan. Jalur clone-saja untuk empat engine penuh masih memerlukan distribusi atau bootstrap binary lintas platform yang ditinjau lisensi, checksum, dan keamanan instalasinya. Ini belum tercapai.
+
 ## Keputusan yang masih terbuka
 
 1. Kebijakan private repository dan perpindahan kepemilikan.

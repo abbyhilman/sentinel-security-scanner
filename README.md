@@ -1,83 +1,31 @@
 # Sentinel Security Scanner
 
-Sentinel adalah MVP pemindai keamanan source code untuk repository PHP dan Node.js/TypeScript. Scanner dijalankan oleh GitHub Actions milik maintainer repository target; report yang disanitasi dikirim ke Supabase dan ditampilkan di dashboard React/Vite.
+Sentinel sekarang memiliki perintah pemindaian lokal yang dapat dijalankan dari terminal. Setelah clone, tidak perlu memasang workflow di repository target atau menyiapkan Supabase untuk pemeriksaan cepat ini. Prasyaratnya Node.js 22.12 atau lebih baru.
 
-## Batas MVP
-
-Sentinel tidak memakai AI saat runtime dan tidak menerima pemindaian URL atau ZIP. MVP tidak menjalankan worker sentral, Redis, BullMQ, Next.js/NestJS sebagai stack aplikasi, atau menyimpan raw source maupun nilai secret.
-
-GitHub OAuth digunakan untuk autentikasi dashboard. Login GitHub **tidak** otomatis menampilkan semua repository akun. Repository target didaftarkan secara manual, lalu harus membuktikan identitas workflow melalui pairing GitHub OIDC. OIDC membuktikan identitas workflow, bukan kebenaran hasil scan.
-
-## Status implementasi
-
-Tahap 01–07 tersedia di workspace branch `master`. Dashboard saat ini tersambung ke API Sentinel untuk sesi dan organisasi aktif. Template GitHub Actions tersedia, tetapi belum dipasang otomatis ke repository target. Perubahan workspace belum di-commit atau di-push.
-
-Migration dan Edge Functions Sentinel telah diterapkan ke project Supabase berdasarkan output CLI. Alur GitHub-hosted dari scan, OIDC, pairing, hingga report tersimpan **belum diverifikasi end-to-end**. Jangan menganggap report nyata tersedia sebelum workflow target berhasil.
-
-## Memasang workflow pada repository target
-
-1. Dari dashboard Sentinel, daftarkan repository dengan format `owner/repo` dan branch default.
-2. Buka detail repository dan buat nonce pairing sementara.
-3. Pasang ketujuh file workflow ke repository target, lalu commit ke branch default.
-4. Tambahkan `SENTINEL_SUPABASE_URL` sebagai repository variable dan `SENTINEL_PAIRING_NONCE` sebagai repository secret pada GitHub Actions.
-5. Dari repository target, buka **Actions → Sentinel Security Scan → Run workflow** pada branch default.
-6. Pairing selesai setelah report pertama diterima dan status repository di dashboard menjadi terverifikasi.
-
-Panduan lengkap dengan screenshot GitHub, kotak merah, nama kolom, dan nilai yang perlu diisi tersedia di [panduan instalasi workflow](templates/github-workflows/README.md#2-atur-variable-dan-secret-di-github). File workflow harus dipasang oleh maintainer; Sentinel tidak menulis atau mendorong file ke repository target. Pull request tidak memicu scan.
-
-Untuk menyalin tujuh file dari PowerShell, jalankan installer dari root repository Sentinel:
+## Mulai
 
 ```powershell
-$targetRepo = 'D:\path\to\repository-target'
-& '.\templates\github-workflows\install.ps1' -TargetRepo $targetRepo
+git clone https://github.com/abbyhilman/sentinel-security-scanner.git
+cd sentinel-security-scanner
+node sentinel.mjs scan D:\path\ke\repository
 ```
 
-Installer berhenti jika menemukan file yang berbeda agar tidak menimpa perubahan target tanpa sengaja. Installer hanya menyalin file; commit dan push dilakukan dari repository target.
-
-## Prasyarat
-
-- Node.js 24.18.0 atau rilis kompatibel minimal 22.12.0.
-- pnpm 10.13.1.
-- Git.
-
-## Menjalankan dashboard lokal
-
-1. Jalankan `pnpm install` dari root.
-2. Atur `VITE_SUPABASE_URL` dan `VITE_SUPABASE_PUBLISHABLE_KEY` di `apps/web/.env.local` untuk menghubungkan dashboard ke Supabase. Biarkan kosong untuk preview.
-3. Jalankan `pnpm --filter @sentinel/web dev`.
-
-Gunakan publishable key saja di frontend. Jangan beri awalan `VITE_` pada service-role key atau secret server. Jika Supabase belum dikonfigurasi, UI menampilkan data contoh sintetis; angka, repository, dan temuan tersebut bukan hasil GitHub atau scanner nyata.
-
-Untuk membuat bundle runner owner-installed, jalankan `pnpm build:workflow`. Docker Desktop tidak diperlukan di komputer maintainer; template berjalan pada GitHub-hosted runner.
-
-Pemeriksaan handler ingestion lokal:
+Jalankan `node sentinel.mjs scan .` untuk memeriksa folder saat ini. Untuk menyimpan report JSON tersanitasi:
 
 ```powershell
-pnpm run sentinel:ingest:check
+node sentinel.mjs scan D:\path\ke\repository --output D:\path\ke\report.json
 ```
 
-Perintah tersebut memeriksa GitHub OIDC verifier dan HTTP handler menggunakan key lokal dan RPC mock. Ini bukan pemindaian repository lokal dan tidak membuktikan Edge Function/PostgreSQL memproses report GitHub end-to-end. Menjalankan Edge Function lokal atau suite database lokal memerlukan Supabase local stack dengan Docker atau container runtime.
+Perintah dapat dipanggil dari folder lain memakai path lengkap ke `sentinel.mjs`. Tidak perlu `pnpm install`, Docker, login GitHub, atau API key untuk mode ini. Jalankan `node sentinel.mjs --help` untuk bantuan. Exit code `0` berarti tidak ada pola yang cocok, `1` berarti ada temuan yang perlu ditinjau, dan `2` berarti scan gagal.
 
-Font Inter dan JetBrains Mono dibundel dari Fontsource (SIL OFL 1.1); pemberitahuan lisensi ada di `apps/web/public/licenses/`.
+## Cakupan saat ini
 
-## Pemeriksaan
+Mode `local-quick` memeriksa pola eksekusi dinamis dan query SQL mentah pada PHP, serta evaluasi kode dan eksekusi shell pada JavaScript/TypeScript. Report hanya menyimpan rule ID, path relatif, nomor baris, dan pesan; tidak menyimpan isi baris sumber atau nilai secret. Folder dependency/build dan symlink dilewati. Scan berhenti jika batas file atau temuan terlampaui.
 
-- `pnpm lint`
-- `pnpm format:check`
-- `pnpm typecheck`
-- `pnpm test`
-- `pnpm build`
-- `pnpm build:workflow`
-- `pnpm check` menjalankan seluruh pemeriksaan di atas.
+Pemeriksaan ini berbasis pola teks. Semgrep, OSV-Scanner, Gitleaks, dan Composer Audit **belum dijalankan** oleh CLI lokal, sehingga report bertanda `coverage: limited`. Tidak ada temuan tidak berarti repository aman. Rencana untuk memperluas CLI ada di [rencana CLI lokal](docs/LOCAL_CLI_TASK_PLAN.md).
 
-## Struktur
+Untuk menjalankan pengujian CLI tanpa instalasi package, gunakan `node --test tests/local-cli.test.mjs`. Hasil pengujian terakhir dan batasnya ada di [ringkasan pengujian](docs/LOCAL_CLI_TEST_SUMMARY.md).
 
-- `apps/web` — aplikasi Vite React TypeScript.
-- `packages/contracts` — skema dan tipe bersama.
-- `packages/scanner-adapters` — parser, sanitizer, deteksi cakupan, dan runner workflow.
-- `supabase` — migrations dan Edge Functions.
-- `templates/github-workflows` — template workflow, dokumentasi, dan panduan visual GitHub.
-- `fixtures` — fixture sintetis PHP dan Node.
-- `docs` — rencana implementasi, decision log, dan QA checklist.
+## Source lama
 
-Jangan memasukkan credential nyata ke fixture, log, artifact, screenshot, atau contoh report.
+`apps/web`, `supabase`, dan `templates/github-workflows` masih ada sebagai implementasi tahap sebelumnya. Jalur tersebut tidak diperlukan untuk perintah lokal di atas. Keputusan perubahan arah dan batas keamanannya tercatat di [decision log](docs/DECISIONS.md).
