@@ -69,6 +69,8 @@ test('output excludes source secrets, dependencies, symlinks, and large files', 
     await writeFile(path.join(directory, 'app.js'), 'eval("TEST_ONLY_DO_NOT_USE_SECRET")\n');
     await mkdir(path.join(directory, 'node_modules'));
     await writeFile(path.join(directory, 'node_modules', 'bad.js'), 'eval("ignored")\n');
+    await mkdir(path.join(directory, '.sentinel-cache'));
+    await writeFile(path.join(directory, '.sentinel-cache', 'cached.js'), 'eval("ignored")\n');
     await writeFile(path.join(directory, 'large.js'), 'x'.repeat(1024 * 1024 + 1));
     try {
       await symlink(path.join(directory, 'app.js'), path.join(directory, 'linked.js'));

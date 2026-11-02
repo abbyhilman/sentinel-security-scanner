@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const ignoredDirectories = new Set([
   '.git',
+  '.sentinel-cache',
   'node_modules',
   'vendor',
   'dist',
