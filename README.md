@@ -9,12 +9,13 @@ Sentinel dapat memeriksa folder kode PHP, JavaScript, atau TypeScript dari termi
 Buka PowerShell. Pastikan `node --version` menampilkan versi **22.12.0 atau lebih baru** dan `git --version` berjalan. Lalu jalankan:
 
 ```powershell
-Set-Location D:\ProjectAbby
+New-Item -ItemType Directory -Force -Path "$HOME\sentinel-workspace" | Out-Null
+Set-Location "$HOME\sentinel-workspace"
 git clone https://github.com/abbyhilman/sentinel-security-scanner.git
 Set-Location .\sentinel-security-scanner
 ```
 
-Jika Sentinel sudah pernah di-clone, masuk ke foldernya lalu jalankan `git pull` untuk mengambil perubahan terbaru. Nama folder boleh berbeda; di komputer pengembangan proyek ini berada di `D:\ProjectAbby\sentinal`.
+Folder contoh `sentinel-workspace` dibuat di direktori pengguna Windows Anda. Jika Sentinel sudah pernah di-clone, masuk ke foldernya lalu jalankan `git pull` untuk mengambil perubahan terbaru.
 
 ## 2. Coba scan pertama
 
@@ -26,16 +27,16 @@ node .\sentinel.mjs scan .\fixtures\node
 
 Output akan menyebut jumlah file dan temuan, misalnya `positive.js:3`. Exit code `1` pada contoh ini **berarti ada temuan untuk ditinjau**, bukan program rusak.
 
-Untuk memeriksa repository Anda sendiri, ganti path berikut dengan **folder repository yang sudah ada di komputer**:
+Untuk memeriksa repository Anda sendiri, letakkan folder repository tersebut di dalam `sentinel-workspace`, sejajar dengan folder `sentinel-security-scanner`. Ganti `nama-repository-anda` dengan nama folder yang sebenarnya:
 
 ```powershell
-node .\sentinel.mjs scan 'D:\ProjectAbby\nama-repository-anda'
+node .\sentinel.mjs scan '..\nama-repository-anda'
 ```
 
-Jika sedang berada di root repository yang ingin dipindai, Anda juga dapat memanggil file Sentinel memakai path lengkap:
+Jika sedang berada di root repository yang ingin dipindai, panggil file Sentinel dari folder contoh tadi:
 
 ```powershell
-node 'D:\ProjectAbby\sentinel-security-scanner\sentinel.mjs' scan .
+node "$HOME\sentinel-workspace\sentinel-security-scanner\sentinel.mjs" scan .
 ```
 
 Sentinel menerima **path folder lokal**, bukan URL GitHub. Jika repository target masih ada di GitHub saja, clone repository target itu ke komputer terlebih dahulu.
@@ -45,7 +46,7 @@ Sentinel menerima **path folder lokal**, bukan URL GitHub. Jika repository targe
 Tambahkan `--output` dan nama file yang **belum ada**:
 
 ```powershell
-node .\sentinel.mjs scan 'D:\ProjectAbby\nama-repository-anda' --output '.\report-sentinel.json'
+node .\sentinel.mjs scan '..\nama-repository-anda' --output '.\report-sentinel.json'
 ```
 
 CLI menolak menimpa report yang sudah ada. Gunakan nama baru untuk scan berikutnya, misalnya `report-sentinel-2.json`. Report berisi rule ID, path relatif, nomor baris, dan pesan; nilai secret serta isi baris source tidak disertakan. Simpan report sesuai kebijakan repository Anda karena nama file/path dapat tetap sensitif.
