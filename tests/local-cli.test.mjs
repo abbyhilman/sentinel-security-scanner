@@ -95,6 +95,19 @@ test('extra positional path is rejected', () => {
   assert.equal(run('scan', '.', path.join(repository, 'fixtures', 'node')).status, 2);
   assert.equal(run('scan', '--output').status, 2);
   assert.equal(run('scan', '--output', '--help').status, 2);
+  assert.equal(run('scan', '--dependencies', '--dependencies').status, 2);
+});
+
+test('dependency audit with no lockfile is explicitly skipped without downloading an engine', () => {
+  const result = run(
+    'scan',
+    path.join(repository, 'fixtures', 'node', 'missing-lock'),
+    '--dependencies',
+  );
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /SKIPPED/);
+  assert.match(result.stdout, /Lockfile yang didukung tidak ditemukan/);
+  assert.doesNotMatch(result.stderr, /Mengunduh/);
 });
 
 test('regex exec is not reported as a shell command', async () => {

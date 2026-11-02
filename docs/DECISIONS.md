@@ -183,6 +183,16 @@ Pendaftaran pending dengan nama yang sama di organisasi berbeda tidak saling mem
 
 **Pembaruan 2 November 2026:** pengguna menyetujui unduhan otomatis ke cache lokal saat pemakaian pertama. OSV-Scanner dan Gitleaks telah diverifikasi dengan checksum resmi pada Windows ini; bootstrap dalam CLI belum dibuat. Semgrep terpasang di cache tetapi `semgrep-core` gagal dengan kesalahan `socketpair`, sehingga mode penuh tetap diblokir. Lihat `docs/LOCAL_CLI_TEST_SUMMARY.md`.
 
+## D-022 — laporan terminal dan audit dependency lokal opsional
+
+**Status:** implementasi berdasarkan permintaan pengguna, 2 November 2026.
+
+**Keputusan:** CLI menampilkan tabel temuan, cakupan engine, saran pencegahan deterministik, dan ringkasan akhir. Opsi `--dependencies` mengaktifkan OSV-Scanner 2.7.0 resmi dengan bootstrap ke cache dan SHA-256 yang dikunci berdasarkan digest aset rilis GitHub. Default tanpa opsi tetap lokal. Audit online mengirim identitas dan versi paket ke layanan OSV; source dan report lengkap tidak diunggah. Pengujian online repository privat memerlukan persetujuan untuk metadata dependency yang mungkin sensitif.
+
+Lockfile dipilih dari inventory folder yang sudah dibatasi; call analysis dan resolusi manifest dinonaktifkan. Konfigurasi OSV target diganti konfigurasi kosong yang dikendalikan Sentinel. Tidak menjalankan script/install/build aplikasi. Paket npm bertanda `source=LOCAL` tidak dihitung sebagai berhasil diaudit; OSV 2.7.0 juga dapat memberikan tanda tersebut pada lockfile npm tanpa `resolved`, sebagaimana dijelaskan maintainer di https://github.com/google/osv-scanner/issues/3177.
+
+Kandidat versi fix diekstrak dari event `fixed` pada advisory untuk nama paket dan ekosistem yang cocok, hanya untuk release numerik yang lebih baru dari versi terpasang. Ini batas perbaikan per advisory, bukan solver yang memilih satu versi bebas seluruh advisory dan kompatibel dengan aplikasi. Versi prerelease/alias/format yang tidak dapat dibandingkan diberi hasil belum diketahui. JSON lokal tetap `coverage: limited`, dengan hasil dependency di `dependencyAudit`. Semgrep, Gitleaks, dan Composer Audit belum terintegrasi ke CLI.
+
 ## Keputusan yang masih terbuka
 
 1. Kebijakan private repository dan perpindahan kepemilikan.

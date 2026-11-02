@@ -1,6 +1,8 @@
 # Rencana Sentinel CLI Lokal
 
-**Status:** CLI pemeriksaan cepat tersedia; cakupan empat engine penuh belum tersedia, 2 November 2026
+**Status:** CLI pemeriksaan cepat dan audit OSV opsional tersedia; empat engine penuh belum terintegrasi, 2 November 2026
+
+Pembaruan: `--dependencies` menambahkan bootstrap OSV resmi dengan checksum, pemindaian lockfile, kandidat versi fix per advisory, tabel terminal, saran pencegahan, dan ringkasan. Detail penggunaan ada di README. Pengujian Windows serta batas yang belum diverifikasi dicatat di `LOCAL_CLI_TEST_SUMMARY.md`. Bagian preflight di bawah adalah catatan historis sebelum implementasi ini.
 
 **Arah produk:** penggunaan scanner melalui terminal lokal; UI bukan alur pemakaian.
 **Catatan:** `node sentinel.mjs scan <folder>` dapat langsung dipakai setelah clone pada komputer dengan Node.js 22.12+. Hasilnya diberi label `local-quick` dan `limited`.

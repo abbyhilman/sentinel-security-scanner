@@ -25,3 +25,18 @@ Semgrep v1.182.0 berhasil dipasang ke virtual environment cache dan `--version` 
 ## Batas kesimpulan
 
 Pola teks dapat cocok dengan komentar, string, fixture, atau source CLI sendiri. Enam kecocokan pada repository Sentinel tidak membuktikan eksploitasi. Scan cepat belum menjalankan empat engine penuh. Jalur GitHub Actions/Supabase end-to-end tidak diuji di sini.
+
+## Pembaruan: tabel terminal dan audit dependency opsional
+
+2 November 2026, Windows x64 / Node.js 24.18.0:
+
+- `pnpm check`: PASS untuk format, ESLint, TypeScript, tes CLI dan 31 tes workspace, serta build. Build dashboard masih memberi peringatan chunk >500 kB.
+- Tes CLI mencakup tabel dengan wrapping, terminal control escaping, ringkasan, pencegahan, report tanpa source/secret, exit code, advisory tanpa fix, validasi paket/ekosistem untuk kandidat fix, output malformed, path di luar target, paket lokal yang dilewati, dan audit tanpa lockfile. Symlink tetap NOT VERIFIED karena Windows menolak pembuatannya.
+- Bootstrap OSV 2.7.0 dari rilis resmi: PASS di Windows x64; checksum diverifikasi sebelum executable dipakai. Platform Linux/macOS dan ARM64: NOT VERIFIED.
+- `node sentinel.mjs scan .sentinel-cache/audit-fixture --dependencies --output .sentinel-cache/audit-smoke-report-2.json`: PASS, exit code 1. Fixture sintetis lodash 4.17.20 dengan lockfile npm registry valid menghasilkan 5 kecocokan advisory. Kandidat fix per advisory dan tautan OSV muncul pada tabel/JSON. Tidak ada package yang diinstal.
+- Fixture pertama tanpa `resolved` menghasilkan paket `source=LOCAL` yang tidak diperiksa advisory oleh OSV. Parser kini mencatat paket tersebut sebagai dilewati, bukan paket berhasil diaudit; jika semua paket dilewati, status SKIPPED. Kasus ini diuji regresi.
+- Scan lokal tanpa jaringan pada repository pilihan pengguna: PASS, 342 file, 0 kecocokan pola, 9 folder diabaikan. Ini tidak membuktikan source aman.
+- Audit online repository pilihan pengguna: NOT VERIFIED, diblokir pemeriksaan persetujuan otomatis sambil menunggu izin pengiriman metadata dependency ke OSV. Uji audit jaringan yang berhasil menggunakan fixture sintetis di cache Sentinel.
+- Semgrep, Gitleaks, Composer Audit: belum dijalankan oleh CLI. OSV mencakup advisory yang dikenali dari lockfile yang didukung, termasuk Composer lockfile; ini bukan eksekusi Composer Audit.
+
+Kandidat fix adalah batas perbaikan advisory, belum solver kompatibilitas antar-advisory. Pemilihan versi final, perubahan dependency, test aplikasi setelah upgrade, full-engine scan, serta pemindaian keamanan menyeluruh belum diverifikasi oleh perubahan ini.
