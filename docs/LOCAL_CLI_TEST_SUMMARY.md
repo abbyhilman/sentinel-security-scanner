@@ -2,27 +2,26 @@
 
 **Tanggal:** 2 November 2026
 
-**Lingkungan:** Windows PowerShell, Node.js 24.18.0, command scan dijalankan dari `D:\ProjectAbby`.
+**Lingkungan:** Windows PowerShell, Node.js 24.18.0, scan dijalankan dari `D:\ProjectAbby`.
 
-## Hasil
+## CLI pemeriksaan cepat
 
-| Pemeriksaan                                    | Hasil              | Bukti                                                                                                                                                                |
-| ---------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Bantuan dan exit code argumen salah            | PASS               | `node --test tests/local-cli.test.mjs`; `--help` = 0, perintah/target salah = 2.                                                                                     |
-| Fixture Node                                   | PASS               | Satu temuan `positive.js:3`, exit code 1, report JSON `local-quick` / `limited`.                                                                                     |
-| Fixture PHP                                    | PASS               | Satu temuan `positive.php:6`, exit code 1.                                                                                                                           |
-| Fixture tanpa pola                             | PASS               | Nol temuan, exit code 0, pesan tetap menyatakan nol temuan bukan bukti aman.                                                                                         |
-| Redaksi output                                 | PASS terbatas      | Dummy secret dalam baris source tidak muncul di stdout/report; report hanya berisi rule, path relatif, baris, dan pesan. Tidak membuktikan semua format secret aman. |
-| Batas file dan folder dependency               | PASS               | File >1 MiB dihitung sebagai dilewati; `node_modules` tidak dipindai.                                                                                                |
-| Report yang sudah ada                          | PASS               | `--output` tidak menimpa file yang sudah ada dan keluar dengan code 2.                                                                                               |
-| Symlink                                        | NOT VERIFIED       | Windows menolak pembuatan symlink pada environment test; kode melewati entry yang dikenali sebagai symlink, tetapi perilakunya belum dibuktikan di mesin ini.        |
-| Scan repository Sentinel sendiri               | PASS sebagai smoke | 64 file diperiksa, 8 kecocokan pola, exit code 1. Ini kandidat review, bukan delapan kerentanan terkonfirmasi.                                                       |
-| Semgrep, OSV-Scanner, Gitleaks, Composer Audit | NOT RUN            | Binary tidak tersedia di PATH dan CLI lokal saat ini belum memanggil keempat engine tersebut.                                                                        |
+- `node --test tests/local-cli.test.mjs`: **6 lulus, 0 gagal**. Bantuan, exit code, fixture PHP/Node, report JSON, dummy secret, batas ukuran, folder dependency, file output yang sudah ada, dan argumen tambahan diperiksa.
+- Scan fixture Node: 1 temuan di `positive.js:3`, exit code 1. Scan fixture PHP: 1 temuan di `positive.php:6`, exit code 1. Fixture tanpa pola: 0 temuan, exit code 0 dengan peringatan cakupan terbatas.
+- Scan repository Sentinel: 64 file, 6 kecocokan pola, exit code 1. Kecocokan tersebut kandidat review, bukan kerentanan terkonfirmasi.
+- `node --check sentinel.mjs` dan `git diff --check`: lulus pada pengujian sebelumnya.
+- Symlink: **NOT VERIFIED**. Windows menolak pembuatan symlink pada environment test; assertion lain tetap berjalan.
 
-## Bug yang ditemukan dan diperbaiki
+## Bug yang diperbaiki
 
-`scan . <folder-lain>` sebelumnya menerima dua target dan diam-diam menggunakan target kedua. Parser sekarang menolak target tambahan. Sebelum perbaikan, suite menunjukkan 4 lulus dan 1 gagal; setelah perbaikan, `node --test tests/local-cli.test.mjs` menunjukkan **5 lulus, 0 gagal**.
+`scan . <folder-lain>` sebelumnya menerima dua target dan memakai target kedua. Parser sekarang menolak target tambahan. Pola perintah shell juga semula menandai metode regex `.exec()`; kasus tersebut kini dikecualikan dan diuji.
+
+## Pemeriksaan engine lokal
+
+Pengguna menyetujui unduhan otomatis ke cache lokal. OSV-Scanner v2.7.0 dan Gitleaks v8.30.1 diunduh dari release resmi ke `.sentinel-cache/` yang diabaikan Git; SHA-256 cocok dengan checksum release. Kedua executable berhasil menjalankan `--version`. Gitleaks memeriksa fixture Node dan melaporkan nol secret. OSV-Scanner berjalan, tetapi `pnpm-lock.yaml` sintetis tidak menghasilkan paket sehingga tidak memvalidasi advisory nyata.
+
+Semgrep v1.182.0 berhasil dipasang ke virtual environment cache dan `--version` berjalan di luar sandbox. Pemindaian dan validasi rules gagal karena `semgrep-core` mengembalikan kesalahan `socketpair` pada environment Windows ini. Composer Audit belum dicoba karena PHP dan Composer tidak tersedia. Cache tersebut belum diintegrasikan ke CLI; unduhan otomatis setelah clone belum selesai.
 
 ## Batas kesimpulan
 
-Pola teks dapat cocok dengan komentar, string, fixture, atau source CLI sendiri. Delapan kecocokan pada repository Sentinel tidak membuktikan eksploitasi. Scan cepat belum mencakup dependency advisory, deteksi secret oleh Gitleaks, atau analisis sintaks Semgrep. Jalur GitHub Actions/Supabase end-to-end juga tidak diuji dalam pengujian ini.
+Pola teks dapat cocok dengan komentar, string, fixture, atau source CLI sendiri. Enam kecocokan pada repository Sentinel tidak membuktikan eksploitasi. Scan cepat belum menjalankan empat engine penuh. Jalur GitHub Actions/Supabase end-to-end tidak diuji di sini.

@@ -35,7 +35,7 @@ const rules = [
   {
     id: 'sentinel.quick.node-shell-command',
     extensions: new Set(['.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts']),
-    pattern: /\b(?:child_process\.)?exec(?:Sync)?\s*\(/gu,
+    pattern: /(?<![.\w])(?:child_process\.)?exec(?:Sync)?\s*\((?!\?:)/gu,
     message: 'Periksa konstruksi perintah shell.',
   },
 ];

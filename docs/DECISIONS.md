@@ -181,6 +181,8 @@ Pendaftaran pending dengan nama yang sama di organisasi berbeda tidak saling mem
 
 **Risiko tersisa:** pemeriksaan pola teks dapat menghasilkan false positive dan melewatkan kerentanan. Jalur clone-saja untuk empat engine penuh masih memerlukan distribusi atau bootstrap binary lintas platform yang ditinjau lisensi, checksum, dan keamanan instalasinya. Ini belum tercapai.
 
+**Pembaruan 2 November 2026:** pengguna menyetujui unduhan otomatis ke cache lokal saat pemakaian pertama. OSV-Scanner dan Gitleaks telah diverifikasi dengan checksum resmi pada Windows ini; bootstrap dalam CLI belum dibuat. Semgrep terpasang di cache tetapi `semgrep-core` gagal dengan kesalahan `socketpair`, sehingga mode penuh tetap diblokir. Lihat `docs/LOCAL_CLI_TEST_SUMMARY.md`.
+
 ## Keputusan yang masih terbuka
 
 1. Kebijakan private repository dan perpindahan kepemilikan.

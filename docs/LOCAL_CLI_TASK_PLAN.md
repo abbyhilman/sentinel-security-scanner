@@ -16,7 +16,7 @@
 
 1. **Selesai: kontrak CLI cepat dan report lokal** — perintah `node sentinel.mjs scan <folder>`, `--output`, bantuan `--help`, exit code, dan label cakupan terbatas.
 2. **Selesai: entrypoint terminal** — Node.js standar, tanpa instalasi package atau Python.
-3. **Tambahkan preflight dependency** — cek versi scanner yang diperlukan dan tampilkan perintah instalasi; jangan mengunduh atau memasang binary tanpa tindakan pengguna.
+3. **Tambahkan bootstrap engine** — pengguna menyetujui unduhan otomatis ke cache proyek. Kunci versi dan SHA-256, lalu unduh hanya paket resmi yang sudah diverifikasi. Kegagalan unduh harus membuat status engine gagal, bukan sukses.
 4. **Tambahkan inventory folder lokal** — scan checkout yang dipilih, abaikan `.git`, dependency/build output, batasi file/path, dan tangani symlink dengan aman.
 5. **Jalankan scanner tanpa Docker** — panggil binary lokal dengan argumen terpisah, timeout dan output cap; Composer harus memakai opsi tanpa plugin/script. Tidak menjalankan build, test, install, atau source repository.
 6. **Pakai ulang adapter dan sanitizer** — normalisasi Semgrep, OSV-Scanner, Gitleaks, dan Composer Audit; nilai secret/raw line tidak boleh masuk report, terminal, atau log.

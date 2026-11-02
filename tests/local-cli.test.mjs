@@ -92,3 +92,15 @@ test('extra positional path is rejected', () => {
   assert.equal(run('scan', '--output').status, 2);
   assert.equal(run('scan', '--output', '--help').status, 2);
 });
+
+test('regex exec is not reported as a shell command', async () => {
+  await inTempDirectory(async (directory) => {
+    await writeFile(path.join(directory, 'regular-expression.js'), '/token/.exec(value);\n');
+    await writeFile(path.join(directory, 'shell.js'), 'child_process.exec(command);\n');
+    const result = run('scan', directory);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /shell\.js:1/);
+    assert.doesNotMatch(result.stdout, /regular-expression\.js/);
+    assert.match(result.stdout, /1 temuan/);
+  });
+});
