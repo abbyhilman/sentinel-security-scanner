@@ -11,6 +11,7 @@ const ignoredDirectories = new Set([
   'build',
   'coverage',
   '.next',
+  '.output',
 ]);
 const maxFiles = 10_000;
 const maxFileBytes = 1024 * 1024;

@@ -71,7 +71,7 @@ Di PowerShell, lihat exit code perintah terakhir dengan `$LASTEXITCODE`. Bantuan
 
 ## Apa yang diperiksa
 
-Mode `local-quick` memeriksa pola eksekusi dinamis dan query SQL mentah pada PHP, serta evaluasi kode dan pemanggilan shell pada JavaScript/TypeScript. Folder `.git`, `.sentinel-cache`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`, dan symlink dilewati. File lebih dari 1 MiB dilewati; scan berhenti jika mencapai 10.000 file atau 1.000 temuan.
+Mode `local-quick` memeriksa pola eksekusi dinamis dan query SQL mentah pada PHP, serta evaluasi kode dan pemanggilan shell pada JavaScript/TypeScript. Folder `.git`, `.sentinel-cache`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`, `.output`, dan symlink dilewati. File lebih dari 1 MiB dilewati; scan berhenti jika mencapai 10.000 file atau 1.000 temuan.
 
 Pola teks bisa cocok dengan komentar, string, atau contoh kode. Empat engine penuh belum terhubung ke perintah lokal, meski sebagian executable telah diuji di lingkungan pengembangan. Report menandai mode `local-quick` dengan `coverage: limited`. Rencana peningkatan ada di [rencana CLI lokal](docs/LOCAL_CLI_TASK_PLAN.md).
 
