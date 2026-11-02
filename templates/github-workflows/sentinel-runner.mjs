@@ -1027,7 +1027,10 @@ function datetime(args) {
 	return new RegExp(`^${dateSource}T(?:${timeRegex})$`);
 }
 var anyString = /^[\s\S]{0,}$/;
+var integer = /^-?\d+$/;
 var number$1 = /^-?\d+(?:\.\d+)?$/;
+var boolean$1 = /^(?:true|false)$/i;
+var _null$2 = /^null$/i;
 var lowercase = /^[^A-Z]*$/;
 var uppercase = /^[^a-z]*$/;
 // ../../node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/core/checks.js
@@ -1827,6 +1830,40 @@ var $ZodNumberFormat = /*@__PURE__*/ $constructor("$ZodNumberFormat", (inst, def
 	$ZodCheckNumberFormat.init(inst, def);
 	$ZodNumber.init(inst, def);
 });
+var $ZodBoolean = /*@__PURE__*/ $constructor("$ZodBoolean", (inst, def) => {
+	$ZodType.init(inst, def);
+	inst._zod.pattern = boolean$1;
+	inst._zod.parse = (payload, _ctx) => {
+		if (def.coerce) try {
+			payload.value = Boolean(payload.value);
+		} catch (_) {}
+		const input = payload.value;
+		if (typeof input === "boolean") return payload;
+		payload.issues.push({
+			expected: "boolean",
+			code: "invalid_type",
+			input,
+			inst
+		});
+		return payload;
+	};
+});
+var $ZodNull = /*@__PURE__*/ $constructor("$ZodNull", (inst, def) => {
+	$ZodType.init(inst, def);
+	inst._zod.pattern = _null$2;
+	inst._zod.values = /* @__PURE__ */ new Set([null]);
+	inst._zod.parse = (payload, _ctx) => {
+		const input = payload.value;
+		if (input === null) return payload;
+		payload.issues.push({
+			expected: "null",
+			code: "invalid_type",
+			input,
+			inst
+		});
+		return payload;
+	};
+});
 var $ZodUnknown = /*@__PURE__*/ $constructor("$ZodUnknown", (inst, def) => {
 	$ZodType.init(inst, def);
 	inst._zod.parse = (payload) => payload;
@@ -2342,6 +2379,138 @@ function handleIntersectionResults(result, left, right) {
 	result.value = merged.data;
 	return result;
 }
+var $ZodRecord = /*@__PURE__*/ $constructor("$ZodRecord", (inst, def) => {
+	$ZodType.init(inst, def);
+	const memo = globalConfig.memoizer;
+	memo?.attach(inst);
+	inst._zod.parse = (payload, ctx) => {
+		const input = payload.value;
+		if (!isPlainObject(input)) {
+			payload.issues.push({
+				expected: "record",
+				code: "invalid_type",
+				input,
+				inst
+			});
+			return payload;
+		}
+		const proms = [];
+		const values = def.keyType._zod.values;
+		if (values && !def.partial) {
+			payload.value = memo ? memo.alloc(inst, payload, {}, ctx) : {};
+			const recordKeys = /* @__PURE__ */ new Set();
+			for (const key of values) if (typeof key === "string" || typeof key === "number" || typeof key === "symbol") {
+				recordKeys.add(typeof key === "number" ? key.toString() : key);
+				if (key === "__proto__") continue;
+				const keyResult = def.keyType._zod.run({
+					value: key,
+					issues: []
+				}, ctx);
+				if (keyResult instanceof Promise) throw new Error("Async schemas not supported in object keys currently");
+				if (keyResult.issues.length) {
+					payload.issues.push({
+						code: "invalid_key",
+						origin: "record",
+						issues: keyResult.issues.map((iss) => finalizeIssue(iss, ctx, config())),
+						input: key,
+						path: [key],
+						inst
+					});
+					continue;
+				}
+				const outKey = keyResult.value;
+				if (outKey === "__proto__") continue;
+				const result = def.valueType._zod.run({
+					value: input[key],
+					issues: []
+				}, ctx);
+				if (result instanceof Promise) proms.push(result.then((result) => {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[outKey] = result.value;
+				}));
+				else {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[outKey] = result.value;
+				}
+			}
+			let unrecognized;
+			for (const key in input) if (!recordKeys.has(key)) {
+				if (def.mode === "loose") {
+					if (key === "__proto__") continue;
+					payload.value[key] = input[key];
+				} else {
+					unrecognized = unrecognized ?? [];
+					unrecognized.push(key);
+				}
+			}
+			if (unrecognized && unrecognized.length > 0) payload.issues.push({
+				code: "unrecognized_keys",
+				input,
+				inst,
+				keys: unrecognized,
+				continue: true
+			});
+		} else {
+			payload.value = memo ? memo.alloc(inst, payload, {}, ctx) : {};
+			let unrecognized;
+			for (const key of Reflect.ownKeys(input)) {
+				if (key === "__proto__") continue;
+				if (!Object.prototype.propertyIsEnumerable.call(input, key)) continue;
+				let keyResult = def.keyType._zod.run({
+					value: key,
+					issues: []
+				}, ctx);
+				if (keyResult instanceof Promise) throw new Error("Async schemas not supported in object keys currently");
+				if (typeof key === "string" && number$1.test(key) && keyResult.issues.length) {
+					const retryResult = def.keyType._zod.run({
+						value: Number(key),
+						issues: []
+					}, ctx);
+					if (retryResult instanceof Promise) throw new Error("Async schemas not supported in object keys currently");
+					if (retryResult.issues.length === 0) keyResult = retryResult;
+				}
+				if (keyResult.issues.length) {
+					if (def.mode === "loose") payload.value[key] = input[key];
+					else if (values) {
+						unrecognized = unrecognized ?? [];
+						unrecognized.push(key);
+					} else payload.issues.push({
+						code: "invalid_key",
+						origin: "record",
+						issues: keyResult.issues.map((iss) => finalizeIssue(iss, ctx, config())),
+						input: key,
+						path: [key],
+						inst
+					});
+					continue;
+				}
+				const outKey = keyResult.value;
+				if (outKey === "__proto__") continue;
+				const result = def.valueType._zod.run({
+					value: input[key],
+					issues: []
+				}, ctx);
+				if (result instanceof Promise) proms.push(result.then((result) => {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[outKey] = result.value;
+				}));
+				else {
+					if (result.issues.length) payload.issues.push(...prefixIssues(key, result.issues));
+					payload.value[outKey] = result.value;
+				}
+			}
+			if (unrecognized && unrecognized.length > 0) payload.issues.push({
+				code: "unrecognized_keys",
+				input,
+				inst,
+				keys: unrecognized,
+				continue: true
+			});
+		}
+		if (proms.length) return Promise.all(proms).then(() => payload);
+		return payload;
+	};
+});
 var $ZodEnum = /*@__PURE__*/ $constructor("$ZodEnum", (inst, def) => {
 	$ZodType.init(inst, def);
 	const values = getEnumValues(def.entries);
@@ -3308,6 +3477,20 @@ function _int(Class, params) {
 	});
 }
 // @__NO_SIDE_EFFECTS__
+function _boolean(Class, params) {
+	return new Class({
+		type: "boolean",
+		...normalizeParams(params)
+	});
+}
+// @__NO_SIDE_EFFECTS__
+function _null$1(Class, params) {
+	return new Class({
+		type: "null",
+		...normalizeParams(params)
+	});
+}
+// @__NO_SIDE_EFFECTS__
 function _unknown(Class) {
 	return new Class({ type: "unknown" });
 }
@@ -4084,6 +4267,16 @@ var numberProcessor = (schema, ctx, _json, params) => {
 		if (rest.length) json.allOf = [...json.allOf ?? [], ...rest.map((m) => ({ multipleOf: m }))];
 	}
 };
+var booleanProcessor = (_schema, _ctx, json, _params) => {
+	json.type = "boolean";
+};
+var nullProcessor = (_schema, ctx, json, _params) => {
+	if (ctx.target === "openapi-3.0") {
+		json.type = "string";
+		json.nullable = true;
+		json.enum = [null];
+	} else json.type = "null";
+};
 var neverProcessor = (_schema, _ctx, json, _params) => {
 	json.not = {};
 };
@@ -4213,6 +4406,107 @@ var intersectionProcessor = (schema, ctx, json, params) => {
 	const allOf = [...isSimpleIntersection(a) ? a.allOf : [a], ...isSimpleIntersection(b) ? b.allOf : [b]];
 	json.allOf = allOf;
 	ctx.intersections.push(allOf);
+};
+/** JSON object keys are always strings, so a numeric record key schema is re-expressed over the
+* numeric-string form the record parser matches. Deferred to `finalize`, after the flatten: a key
+* behind a wrapper only carries its own `type` before then, and a union key only has its branches.
+*
+* A numeric bound cannot apply to a property name, so `minimum` and its siblings are dropped rather
+* than carried over: keeping them beside `type: "string"` reproduces the match-nothing schema this
+* exists to fix. A key that carries one therefore emits wider than the record parses — `z.record(z.number().min(5), V)`
+* accepts `"3"` — which is the deliberate trade, since throwing on it would reject an ordinary schema
+* outright. */
+function stringifyKeyNames(bySchema, json, visited) {
+	if (json.$ref) {
+		if (visited.has(json)) return json;
+		visited.add(json);
+		const def = bySchema.get(json)?.def;
+		if (!def) return json;
+		const inlined = stringifyKeyNames(bySchema, def, visited);
+		return inlined === def ? json : inlined;
+	}
+	for (const keyword of ["anyOf", "oneOf"]) {
+		const branches = json[keyword];
+		if (!Array.isArray(branches)) continue;
+		const mapped = branches.map((branch) => stringifyKeyNames(bySchema, branch, visited));
+		if (mapped.some((branch, i) => branch !== branches[i])) json = {
+			...json,
+			[keyword]: mapped
+		};
+	}
+	const types = Array.isArray(json.type) ? json.type : [json.type];
+	const numericType = !types.includes("string") && types.some((t) => t === "number" || t === "integer");
+	const values = json.enum ?? (json.const !== void 0 ? [json.const] : void 0);
+	if (!numericType && !values?.some((v) => typeof v === "number")) return json;
+	const { minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf, format, id, ...rest } = json;
+	if (rest.enum) rest.enum = rest.enum.map((v) => typeof v === "number" ? String(v) : v);
+	else if (typeof rest.const === "number") rest.const = String(rest.const);
+	if (!numericType) return rest;
+	rest.type = "string";
+	if (!values) rest.pattern = (types.includes("number") ? number$1 : integer).source;
+	return rest;
+}
+/** Every record of one conversion, so the carriers are found in a single pass rather than once per record. */
+var pendingRecords = /* @__PURE__ */ new WeakMap();
+function rewriteKeyNames(ctx) {
+	const bySchema = /* @__PURE__ */ new Map();
+	for (const entry of ctx.seen.values()) if (entry.def && !bySchema.has(entry.schema)) bySchema.set(entry.schema, entry);
+	const rewrites = /* @__PURE__ */ new Map();
+	for (const record of pendingRecords.get(ctx) ?? []) {
+		const seen = ctx.seen.get(record);
+		const names = (seen?.def ?? seen?.schema)?.propertyNames;
+		if (!names || names === true || rewrites.has(names)) continue;
+		const rewritten = stringifyKeyNames(bySchema, names, /* @__PURE__ */ new Set());
+		if (rewritten !== names) rewrites.set(names, rewritten);
+	}
+	if (!rewrites.size) return;
+	for (const entry of ctx.seen.values()) for (const carrier of [entry.schema, entry.def]) {
+		const rewritten = carrier && rewrites.get(carrier.propertyNames);
+		if (rewritten) carrier.propertyNames = rewritten;
+	}
+}
+var recordProcessor = (schema, ctx, _json, params) => {
+	const json = _json;
+	const def = schema._zod.def;
+	json.type = "object";
+	const keyType = def.keyType;
+	const patterns = aggregateChecks(keyType).patterns;
+	if (def.mode === "loose" && patterns && patterns.size > 0) {
+		const valueSchema = processSchema(def.valueType, ctx, {
+			...params,
+			path: [
+				...params.path,
+				"patternProperties",
+				"*"
+			]
+		});
+		json.patternProperties = {};
+		for (const pattern of patterns) assignProp(json.patternProperties, exactPattern(pattern).source, valueSchema);
+	} else {
+		if (ctx.target === "draft-07" || ctx.target === "draft-2020-12") {
+			json.propertyNames = processSchema(def.keyType, ctx, {
+				...params,
+				path: [...params.path, "propertyNames"]
+			});
+			let pending = pendingRecords.get(ctx);
+			if (!pending) {
+				pending = [];
+				pendingRecords.set(ctx, pending);
+				ctx.deferred.push(() => rewriteKeyNames(ctx));
+			}
+			pending.push(schema);
+		}
+		json.additionalProperties = processSchema(def.valueType, ctx, {
+			...params,
+			path: [...params.path, "additionalProperties"]
+		});
+	}
+	const keyValues = keyType._zod.values;
+	const omittableOnInput = ctx.io === "input" && inputOptin(def.valueType) !== void 0;
+	if (keyValues && !def.partial && !omittableOnInput) {
+		const validKeyValues = [...keyValues].filter((v) => typeof v === "string" || typeof v === "number");
+		if (validKeyValues.length > 0) json.required = validKeyValues.map(String);
+	}
 };
 var nullableProcessor = (schema, ctx, json, params) => {
 	const def = schema._zod.def;
@@ -4853,6 +5147,22 @@ var ZodNumberFormat = /*@__PURE__*/ $constructor("ZodNumberFormat", (inst, def) 
 function int(params) {
 	return /* @__PURE__ */ _int(ZodNumberFormat, params);
 }
+var ZodBoolean = /*@__PURE__*/ $constructor("ZodBoolean", (inst, def) => {
+	$ZodBoolean.init(inst, def);
+	ZodType.init(inst, def);
+	inst._zod.processJSONSchema = (ctx, json, params) => booleanProcessor(inst, ctx, json, params);
+});
+function boolean(params) {
+	return /* @__PURE__ */ _boolean(ZodBoolean, params);
+}
+var ZodNull = /*@__PURE__*/ $constructor("ZodNull", (inst, def) => {
+	$ZodNull.init(inst, def);
+	ZodType.init(inst, def);
+	inst._zod.processJSONSchema = (ctx, json, params) => nullProcessor(inst, ctx, json, params);
+});
+function _null(params) {
+	return /* @__PURE__ */ _null$1(ZodNull, params);
+}
 var ZodUnknown = /*@__PURE__*/ $constructor("ZodUnknown", (inst, def) => {
 	$ZodUnknown.init(inst, def);
 	ZodType.init(inst, def);
@@ -4975,6 +5285,28 @@ function intersection(left, right) {
 		type: "intersection",
 		left,
 		right
+	});
+}
+var ZodRecord = /*@__PURE__*/ $constructor("ZodRecord", (inst, def) => {
+	_ensureDefaultMemoizer();
+	$ZodRecord.init(inst, def);
+	ZodType.init(inst, def);
+	inst._zod.processJSONSchema = (ctx, json, params) => recordProcessor(inst, ctx, json, params);
+	inst.keyType = def.keyType;
+	inst.valueType = def.valueType;
+});
+function record(keyType, valueType, params) {
+	if (!valueType || !valueType._zod) return new ZodRecord({
+		type: "record",
+		keyType: string(),
+		valueType: keyType,
+		...normalizeParams(valueType)
+	});
+	return new ZodRecord({
+		type: "record",
+		keyType,
+		valueType,
+		...normalizeParams(params)
 	});
 }
 var ZodEnum = /*@__PURE__*/ $constructor("ZodEnum", (inst, def) => {
@@ -5210,6 +5542,259 @@ object({
 		path: ["supabaseUrl"]
 	});
 });
+// ../../packages/contracts/src/api.ts
+var uuidSchema = string().uuid();
+object({
+	createdAt: string().datetime({ offset: true }),
+	id: uuidSchema
+}).strict();
+_enum([
+	"critical",
+	"high",
+	"medium",
+	"low",
+	"info",
+	"unknown"
+]);
+var findingScannerFilterSchema = _enum([
+	"semgrep",
+	"osv",
+	"gitleaks",
+	"composer"
+]);
+_enum([
+	"open",
+	"acknowledged",
+	"investigating",
+	"false_positive",
+	"accepted_risk",
+	"fixed"
+]);
+object({ error: object({
+	code: string().min(1).max(80),
+	message: string().min(1).max(240),
+	requestId: string().uuid(),
+	retryable: boolean()
+}).strict() }).strict();
+object({
+	limit: number().int().min(1).max(100),
+	nextCursor: string().max(512).nullable()
+}).strict();
+object({ data: array(object({
+	id: string().uuid(),
+	name: string().min(1).max(160),
+	slug: string().min(1).max(160),
+	role: _enum([
+		"owner",
+		"maintainer",
+		"viewer"
+	]).optional()
+}).strict()) }).strict();
+object({ name: string().trim().min(1).max(160) }).strict();
+object({
+	organizationId: string().uuid(),
+	fullName: string().trim().min(3).max(200).regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+	defaultBranch: string().trim().min(1).max(255).regex(/^[A-Za-z0-9_./-]+$/).refine((value) => !/(^\/|\/$|\/\/|(^|\/)\.\.?($|\/)|\.lock$)/u.test(value))
+}).strict();
+object({
+	id: string().uuid(),
+	organizationId: string().uuid(),
+	fullName: string().min(3).max(200),
+	visibility: _enum([
+		"public",
+		"private",
+		"internal",
+		"unknown"
+	]),
+	defaultBranch: string().min(1).max(255),
+	status: _enum([
+		"pending_pairing",
+		"verified",
+		"disabled"
+	]),
+	createdAt: string().datetime({ offset: true }),
+	updatedAt: string().datetime({ offset: true }),
+	workflows: array(object({
+		workflowRef: string().min(1).max(512),
+		refPattern: string().max(500).nullable(),
+		enabled: boolean()
+	}).strict()).optional(),
+	lastRun: object({
+		id: string().uuid(),
+		githubRunId: string().min(1),
+		status: _enum([
+			"awaiting_report",
+			"running",
+			"completed",
+			"partial",
+			"failed",
+			"cancelled",
+			"rejected"
+		]),
+		createdAt: string().datetime({ offset: true }),
+		completedAt: string().datetime({ offset: true }).nullable(),
+		commitSha: string().min(1),
+		ref: string().min(1)
+	}).nullable().optional()
+}).strict();
+object({
+	id: string().uuid(),
+	organizationId: string().uuid(),
+	fullName: string().min(3).max(200),
+	defaultBranch: string().min(1).max(255),
+	status: literal("pending_pairing"),
+	pairingExpiresAt: _null()
+}).strict();
+object({
+	repositoryId: string().uuid(),
+	nonce: string().min(32).max(128),
+	expiresAt: string().datetime({ offset: true }),
+	workflowFile: literal(".github/workflows/sentinel-scan.yml")
+}).strict();
+var scannerExecutionApiSchema = object({
+	scanner: _enum([
+		"semgrep",
+		"osv",
+		"gitleaks",
+		"composer"
+	]),
+	version: string().min(1).max(100),
+	status: _enum([
+		"success",
+		"skipped",
+		"failed",
+		"timed_out"
+	]),
+	elapsedMs: number().int().nonnegative().nullable(),
+	findingsCount: number().int().nonnegative(),
+	skipReason: string().nullable(),
+	errorRedacted: string().nullable(),
+	rulesetVersion: string().nullable(),
+	rulesetDigest: string().nullable(),
+	rulesetSource: string().nullable(),
+	licenseGate: _enum([
+		"approved",
+		"blocked",
+		"unknown"
+	])
+}).strict();
+object({
+	id: string().uuid(),
+	repositoryId: string().uuid(),
+	repositoryFullName: string().min(3).max(200).optional(),
+	githubRunId: string().min(1),
+	runAttempt: number().int().positive(),
+	commitSha: string().min(40).max(64),
+	ref: string().min(1).max(500),
+	eventName: string().min(1).max(100),
+	status: _enum([
+		"awaiting_report",
+		"running",
+		"completed",
+		"partial",
+		"failed",
+		"cancelled",
+		"rejected"
+	]),
+	reportSchemaVersion: number().int().positive(),
+	startedAt: string().datetime({ offset: true }).nullable(),
+	completedAt: string().datetime({ offset: true }).nullable(),
+	workflowRef: string().max(512).nullable(),
+	coverage: record(string(), unknown()),
+	createdAt: string().datetime({ offset: true }),
+	engines: array(scannerExecutionApiSchema).optional()
+}).strict();
+var findingEvidenceApiSchema = object({
+	filePath: string().min(1).max(1024),
+	lineStart: number().int().positive().nullable(),
+	lineEnd: number().int().positive().nullable(),
+	redactedExcerpt: string().nullable(),
+	packageName: string().nullable(),
+	version: string().nullable()
+}).strict();
+var findingAdvisoryApiSchema = object({
+	source: string().min(1).max(80),
+	sourceAdvisoryId: string().min(1).max(255),
+	title: string().nullable(),
+	severity: string().nullable(),
+	aliases: array(object({
+		alias: string(),
+		type: string()
+	}).strict())
+}).strict();
+object({
+	id: string().uuid(),
+	scanId: string().uuid(),
+	repositoryId: string().uuid(),
+	repositoryFullName: string().min(3).max(200),
+	githubRunId: string().min(1),
+	runAttempt: number().int().positive(),
+	commitSha: string().min(40).max(64),
+	ref: string().min(1).max(500),
+	fingerprint: string().regex(/^[0-9a-f]{64}$/),
+	scanner: findingScannerFilterSchema,
+	ruleId: string().min(1).max(255),
+	category: _enum([
+		"sast",
+		"secret",
+		"sca",
+		"unknown"
+	]),
+	severity: _enum([
+		"critical",
+		"high",
+		"medium",
+		"low",
+		"info",
+		"unknown"
+	]),
+	evidenceStatus: _enum([
+		"detected",
+		"potentially_affected",
+		"unknown",
+		"not_applicable"
+	]),
+	title: string().min(1).max(500),
+	messageRedacted: string().max(4e3),
+	sourceUrl: string().url().nullable(),
+	createdAt: string().datetime({ offset: true }),
+	triage: _enum([
+		"open",
+		"acknowledged",
+		"investigating",
+		"false_positive",
+		"accepted_risk",
+		"fixed"
+	]),
+	evidence: array(findingEvidenceApiSchema),
+	advisories: array(findingAdvisoryApiSchema)
+}).strict();
+object({
+	repositoryCount: number().int().nonnegative(),
+	verifiedRepositoryCount: number().int().nonnegative(),
+	pendingRepositoryCount: number().int().nonnegative(),
+	openFindingCount: number().int().nonnegative(),
+	recentRuns: array(object({
+		id: string().uuid(),
+		repositoryId: string().uuid(),
+		repositoryFullName: string().min(3).max(200),
+		githubRunId: string().min(1),
+		runAttempt: number().int().positive(),
+		commitSha: string().min(40).max(64),
+		ref: string().min(1).max(500),
+		status: _enum([
+			"awaiting_report",
+			"running",
+			"completed",
+			"partial",
+			"failed",
+			"cancelled",
+			"rejected"
+		]),
+		completedAt: string().datetime({ offset: true }).nullable(),
+		createdAt: string().datetime({ offset: true })
+	}).strict())
+}).strict();
 // ../../packages/contracts/src/scanner.ts
 var scannerNameSchema = _enum([
 	"semgrep",
