@@ -2,6 +2,8 @@
 
 **Status:** CLI pemeriksaan cepat dan audit OSV opsional tersedia; empat engine penuh belum terintegrasi, 2 November 2026
 
+**Pembaruan offline:** `prepare-offline` dan `scan --offline` sudah tersedia untuk core Semgrep, Gitleaks, serta OSV dengan database npm/Packagist lokal. Gitleaks dan OSV berhasil diuji secara offline. Semgrep native masih gagal pada Windows ini; WSL belum dapat dimulai. Pengguna memilih panduan `WSL_OFFLINE_SETUP.md` dan harus mengaktifkan fitur Windows/restart sebelum verifikasi Semgrep Linux dilanjutkan. Composer Audit terpisah belum terintegrasi. Daftar pekerjaan historis di bawah belum seluruhnya selesai.
+
 Pembaruan: `--dependencies` menambahkan bootstrap OSV resmi dengan checksum, pemindaian lockfile, kandidat versi fix per advisory, tabel terminal, saran pencegahan, dan ringkasan. Detail penggunaan ada di README. Pengujian Windows serta batas yang belum diverifikasi dicatat di `LOCAL_CLI_TEST_SUMMARY.md`. Bagian preflight di bawah adalah catatan historis sebelum implementasi ini.
 
 **Arah produk:** penggunaan scanner melalui terminal lokal; UI bukan alur pemakaian.

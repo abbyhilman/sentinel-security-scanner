@@ -193,6 +193,16 @@ Lockfile dipilih dari inventory folder yang sudah dibatasi; call analysis dan re
 
 Kandidat versi fix diekstrak dari event `fixed` pada advisory untuk nama paket dan ekosistem yang cocok, hanya untuk release numerik yang lebih baru dari versi terpasang. Ini batas perbaikan per advisory, bukan solver yang memilih satu versi bebas seluruh advisory dan kompatibel dengan aplikasi. Versi prerelease/alias/format yang tidak dapat dibandingkan diberi hasil belum diketahui. JSON lokal tetap `coverage: limited`, dengan hasil dependency di `dependencyAudit`. Semgrep, Gitleaks, dan Composer Audit belum terintegrasi ke CLI.
 
+## D-023 — persiapan publik dan scan multi-engine offline
+
+**Status:** implementasi atas permintaan pengguna, 2 November 2026; keberhasilan Semgrep pada komputer Windows ini masih diblokir runtime.
+
+**Keputusan:** `prepare-offline` tidak menerima target, hanya mengunduh artifact engine resmi terverifikasi serta snapshot penuh npm/Packagist dari bucket OSV publik. Snapshot dikunci ke generation saat diunduh, dicocokkan ukuran/checksum metadata, lalu dicatat SHA-256 dan waktu snapshot. `scan --offline` tidak mengunduh apa pun: OSV selalu `--offline`, Semgrep memakai core dan rules lokal ber-digest approved, Gitleaks memakai konfigurasi lokal tetap dan `--redact=100`. Tidak ada fallback dari offline ke online; kombinasi dengan `--dependencies` ditolak. Bootstrap, cache, atau runtime yang gagal dicatat sebagai engine FAILED.
+
+Pemilihan file Semgrep memakai inventory source yang sudah dibatasi. Gitleaks memeriksa working tree dengan pengecualian dependency/build, batas 1 MiB/file, tanpa mengikuti symlink dan tanpa riwayat Git. Output raw source, metavariable Semgrep, Secret/Match/Description Gitleaks tidak dimasukkan ke JSON/terminal. Engine Semgrep dan rules Sentinel MIT mengikuti gate lisensi yang sudah ada; archive resmi beserta file lisensinya disimpan di cache, tidak mengganti aturan dengan Registry.
+
+**Bukti dan batas:** Gitleaks positive fixture + redaksi dan OSV advisory offline berhasil. Semgrep native 1.182.0, pembanding 1.183.0 dan 1.162.0 gagal pada `socketpair`. WSL Ubuntu terdaftar tetapi gagal dimulai karena fitur VM belum tersedia. Pengguna memilih panduan aktivasi WSL; fitur Windows tidak diaktifkan dan reboot tidak dijalankan oleh agent. Linux/macOS belum diuji. Mode offline menggunakan perilaku lokal tool dan tidak memakai isolasi jaringan level OS; packet capture/firewall egress belum diverifikasi. Status keseluruhan tetap sebagian gagal sampai Semgrep benar-benar memindai dengan sukses.
+
 ## Keputusan yang masih terbuka
 
 1. Kebijakan private repository dan perpindahan kepemilikan.

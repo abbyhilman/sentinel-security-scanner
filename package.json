@@ -12,7 +12,7 @@
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,json,css,html}\" \"packages/**/*.{ts,json,js,mjs}\" \"*.{json,js,mjs}\" \"templates/github-workflows/**/*.{yml,yaml,json,md}\" \"pnpm-workspace.yaml\" \".github/**/*.yml\"",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "test": "pnpm test:cli && pnpm --recursive --if-present test",
-    "test:cli": "node --test tests/local-cli.test.mjs tests/local-report.test.mjs",
+    "test:cli": "node --test tests/local-cli.test.mjs tests/local-report.test.mjs tests/offline.test.mjs",
     "sentinel:ingest:check": "pnpm --filter @sentinel/contracts test:ingest",
     "build": "pnpm --filter @sentinel/web build",
     "build:workflow": "pnpm --filter @sentinel/web exec vite build --config ../../vite.workflow.config.mjs",

@@ -70,6 +70,9 @@ function table(headers, rows, widths) {
 export function renderReport(report, columns = 100) {
   const width = Math.max(60, Math.min(columns, 120));
   const lines = ['SENTINEL - HASIL PEMERIKSAAN', ''];
+  const sourceEngines = report.sourceEngines ?? [];
+  if (report.networkMode === 'offline')
+    lines.push('Mode OFFLINE: cache lokal; tanpa unduhan atau query advisory.', '');
   lines.push('TEMUAN SOURCE (kecocokan pola; status: perlu review)');
   if (!report.findings.length) lines.push('Tidak ada kecocokan pola pada file yang diperiksa.');
   else
@@ -100,21 +103,56 @@ export function renderReport(report, columns = 100) {
       [
         ['Pola bawaan', 'SELESAI - pencocokan teks'],
         [`OSV${audit.version ? ` ${audit.version}` : ''}`, audit.status.toUpperCase()],
-        ['Semgrep', 'BELUM DIJALANKAN'],
-        ['Gitleaks', 'BELUM DIJALANKAN'],
+        ...['semgrep', 'gitleaks'].map((engine) => {
+          const execution = sourceEngines.find((item) => item.engine === engine);
+          return [
+            execution
+              ? `${engine} ${execution.version}`
+              : engine === 'semgrep'
+                ? 'Semgrep'
+                : 'Gitleaks',
+            execution ? execution.status.toUpperCase() : 'BELUM DIJALANKAN',
+          ];
+        }),
         ['Composer Audit', 'BELUM DIJALANKAN'],
       ],
       [17, width - 24],
     ),
   );
   if (audit.reason) lines.push(safe(audit.reason));
+  if (audit.databasePreparedAt)
+    lines.push(
+      `Snapshot database offline: ${safe(audit.databasePreparedAt)}. Advisory setelah snapshot belum tercakup.`,
+    );
+  for (const execution of sourceEngines) {
+    if (execution.reason) lines.push(`${execution.engine}: ${safe(execution.reason)}`);
+    if (execution.scope) lines.push(`${execution.engine}: ${safe(execution.scope)}`);
+  }
   if (audit.skippedLocalPackages)
     lines.push(`${audit.skippedLocalPackages} entri paket lokal/tanpa resolved tidak diaudit OSV.`);
+
+  const engineFindings = sourceEngines.flatMap((engine) => engine.findings);
+  if (sourceEngines.length) {
+    lines.push('', 'TEMUAN SEMGREP DAN GITLEAKS (perlu review)');
+    if (engineFindings.length)
+      lines.push(
+        table(
+          ['Engine', 'Lokasi file:baris', 'Rule ID'],
+          engineFindings
+            .slice(0, 20)
+            .map((finding) => [finding.engine, `${finding.file}:${finding.line}`, finding.ruleId]),
+          [8, width - 44, 26],
+        ),
+      );
+    else lines.push('Tidak ada temuan engine yang tersedia. Periksa status setiap engine di atas.');
+    if (engineFindings.length > 20)
+      lines.push(`${engineFindings.length - 20} temuan engine lain: gunakan --output.`);
+  }
 
   lines.push('', 'PEMBARUAN DEPENDENCY');
   if (audit.status !== 'success') {
     lines.push('Paket dan versi perbaikan belum dapat ditentukan.');
-    if (audit.status === 'not_requested')
+    if (audit.status === 'not_requested' && report.networkMode !== 'offline')
       lines.push('Tambahkan --dependencies untuk audit lockfile melalui OSV.');
   } else if (!audit.findings.length) {
     lines.push('Tidak ada advisory yang cocok pada paket yang diperiksa saat audit ini.');
@@ -163,6 +201,14 @@ export function renderReport(report, columns = 100) {
     lines.push(
       'Konfirmasi konteks setiap kecocokan: komentar, string, atau contoh dapat ikut cocok.',
     );
+  if (engineFindings.some((finding) => finding.engine === 'gitleaks'))
+    lines.push(
+      'Indikasi secret: verifikasi dan cabut/rotasi credential yang aktif, periksa penyalahgunaan dan riwayat Git, lalu simpan credential di secret manager. Nilai secret tidak disertakan dalam report.',
+    );
+  if (engineFindings.some((finding) => finding.engine === 'semgrep'))
+    lines.push(
+      'Temuan Semgrep: tinjau aliran input, gunakan API aman serta parameter binding, lalu jalankan test perbaikan. Deteksi aturan belum membuktikan eksploitasi.',
+    );
   if (report.output) lines.push('', `Report JSON: ${safe(report.output)}`);
   lines.push(
     '',
@@ -170,12 +216,17 @@ export function renderReport(report, columns = 100) {
     `${report.scannedFiles} file diperiksa; ${report.findings.length} temuan source untuk ditinjau.`,
     `${report.skippedDirectories} folder diabaikan; ${report.skippedLargeFiles} file besar/berubah dan ${report.skippedLinks} symlink dilewati.`,
     `Dependency: ${audit.status.toUpperCase()}; ${audit.packageCount ?? 0} entri paket diperiksa; ${audit.findings.length} kecocokan advisory.`,
+    ...(sourceEngines.length
+      ? [
+          `Semgrep/Gitleaks: ${engineFindings.length} temuan engine untuk ditinjau. Riwayat Git belum dipindai.`,
+        ]
+      : []),
     ...(audit.status === 'success'
       ? [
           `${new Set(audit.findings.map((finding) => `${finding.ecosystem}/${finding.package}@${finding.version}`)).size} paket/versi terdampak advisory; ${audit.findings.filter((finding) => !finding.fixedVersions.length).length} advisory tanpa kandidat fix yang dapat ditentukan.`,
         ]
       : []),
-    `Status: ${audit.status === 'failed' ? 'SEBAGIAN GAGAL' : 'SELESAI DENGAN CAKUPAN TERBATAS'}.`,
+    `Status: ${audit.status === 'failed' || sourceEngines.some((engine) => engine.status === 'failed') ? 'SEBAGIAN GAGAL' : 'SELESAI DENGAN CAKUPAN TERBATAS'}.`,
     'Tidak ada temuan bukan bukti aman. Temuan belum membuktikan eksploitasi.',
   );
   return lines.join('\n');

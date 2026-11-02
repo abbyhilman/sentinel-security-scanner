@@ -40,3 +40,16 @@ Pola teks dapat cocok dengan komentar, string, fixture, atau source CLI sendiri.
 - Semgrep, Gitleaks, Composer Audit: belum dijalankan oleh CLI. OSV mencakup advisory yang dikenali dari lockfile yang didukung, termasuk Composer lockfile; ini bukan eksekusi Composer Audit.
 
 Kandidat fix adalah batas perbaikan advisory, belum solver kompatibilitas antar-advisory. Pemilihan versi final, perubahan dependency, test aplikasi setelah upgrade, full-engine scan, serta pemindaian keamanan menyeluruh belum diverifikasi oleh perubahan ini.
+
+## Pembaruan: mode multi-engine offline
+
+- `pnpm check`: PASS, mencakup format, ESLint, typecheck, **17 tes CLI + 31 tes workspace**, dan build. Tes offline menolak mode online/offline bersamaan, menolak target pada prepare, memverifikasi cache OSV offline tidak melakukan fallback download, dan memeriksa normalisasi/redaksi engine. `git diff --check`: PASS. Symlink serta packet capture tetap belum diverifikasi.
+- `node sentinel.mjs prepare-offline`: PASS. Tool resmi tersimpan dengan checksum pinned; snapshot npm sekitar 220 MB dan Packagist sekitar 11 MB diunduh tanpa target/inventory repository. Snapshot memakai generation resmi dan checksum metadata, serta SHA-256 lokal. Runtime semua engine belum otomatis dianggap berhasil hanya karena cache tersedia.
+- Positive fixture offline: Gitleaks mendeteksi dummy GitHub PAT; nilai dummy tidak ditemukan pada JSON atau stdout/stderr. OSV offline menemukan 5 kecocokan advisory pada lodash 4.17.20 dari snapshot lokal dan menampilkan kandidat fix. Tidak ada package/install/build aplikasi dijalankan.
+- Semgrep core native 1.182.0: FAIL dengan socketpair. Pembanding 1.183.0 serta 1.162.0 juga gagal. Versi pembanding hanya diagnostik di cache, bukan versi runtime baru produk.
+- `wsl --list --quiet`: Ubuntu-24.04 terdaftar. Menjalankan Ubuntu: FAIL `HCS_E_SERVICE_NOT_AVAILABLE`, sehingga Semgrep Linux/WSL: NOT VERIFIED. Pengguna meminta panduan aktivasi WSL; fitur OS/reboot tidak dijalankan otomatis.
+- Scan repository pilihan pengguna menggunakan `--offline`: Gitleaks SUCCESS, OSV SUCCESS, Semgrep FAILED. Exit code Node 2 / status SEBAGIAN GAGAL terverifikasi. 342 file source diperiksa, 0 kecocokan quick-pattern; 19 indikasi secret pada working tree; 1.472 entri paket dan 81 kecocokan advisory dari lockfile, termasuk salinan di folder tmp. Jumlah tersebut bukan jumlah vulnerability unik, dan indikasi secret belum dibuktikan credential privat/aktif.
+- Report tersanitasi hanya disimpan lokal dalam `.sentinel-cache/`; raw values, source lines, dan metavariables tidak diekspor. Tidak ada query online OSV untuk repository pilihan pengguna. Pembaruan dependency dan validasi credential tidak dijalankan.
+- Offline memakai opsi tool/local core yang tidak memerlukan layanan luar. Isolasi jaringan OS dan packet capture belum diuji; ini bukan sertifikasi egress menyeluruh. Snapshot advisory dapat menjadi usang dan perlu diperbarui lewat tahap persiapan publik.
+
+Untuk menuntaskan scan tiga engine pada Windows ini, ikuti `WSL_OFFLINE_SETUP.md`, lalu ulangi fixture dan scan repository memakai Node Linux setelah restart. Jangan menandai gate Semgrep PASS sebelum hasil engine nyata tersedia.

@@ -30,7 +30,7 @@ async function digest(file) {
   return hash.digest('hex');
 }
 
-export async function ensureOsv() {
+export async function ensureOsv({ offline = false } = {}) {
   const key = `${process.platform}-${process.arch}`;
   const expected = digests[key];
   if (!expected) throw new Error('Platform OSV belum didukung.');
@@ -50,6 +50,7 @@ export async function ensureOsv() {
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
+  if (offline) throw new Error('Cache OSV belum disiapkan.');
   const platform = process.platform === 'win32' ? 'windows' : process.platform;
   const architecture = process.arch === 'x64' ? 'amd64' : 'arm64';
   const asset = `osv-scanner_${platform}_${architecture}${process.platform === 'win32' ? '.exe' : ''}`;
@@ -162,7 +163,7 @@ export function parseDependencyOutput(raw, root) {
   return { packageCount, skippedLocalPackages, findings };
 }
 
-export async function auditDependencies(root, lockfiles) {
+export async function auditDependencies(root, lockfiles, { offlineDatabase } = {}) {
   if (!lockfiles.length)
     return { status: 'skipped', reason: 'Lockfile yang didukung tidak ditemukan.', findings: [] };
   if (lockfiles.length > 100)
@@ -174,7 +175,7 @@ export async function auditDependencies(root, lockfiles) {
       if (!info.isFile() || info.isSymbolicLink() || info.size > 20 * 1024 * 1024)
         throw new Error('Lockfile tidak valid atau lebih dari 20 MiB.');
     }
-    const executable = await ensureOsv();
+    const executable = await ensureOsv({ offline: Boolean(offlineDatabase) });
     const temporary = await mkdtemp(path.join(path.dirname(executable), 'scan-'));
     try {
       const config = path.join(temporary, 'osv-scanner.toml');
@@ -188,6 +189,7 @@ export async function auditDependencies(root, lockfiles) {
         '--no-call-analysis=go',
         '--no-call-analysis=rust',
         `--config=${config}`,
+        ...(offlineDatabase ? ['--offline'] : []),
         ...lockfiles.flatMap((file) => ['--lockfile', file]),
       ];
       let stdout;
@@ -198,6 +200,15 @@ export async function auditDependencies(root, lockfiles) {
           maxBuffer: 12 * 1024 * 1024,
           encoding: 'utf8',
           windowsHide: true,
+          env: {
+            ...process.env,
+            ...(offlineDatabase
+              ? {
+                  OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY: offlineDatabase,
+                  OSV_SCALIBR_LOCAL_DB_CACHE_DIRECTORY: offlineDatabase,
+                }
+              : {}),
+          },
         }));
       } catch (error) {
         if (error.code !== 1 || error.killed || error.signal) throw error;
@@ -218,6 +229,7 @@ export async function auditDependencies(root, lockfiles) {
         status: 'success',
         checkedAt: new Date().toISOString(),
         lockfileCount: lockfiles.length,
+        networkMode: offlineDatabase ? 'offline' : 'online',
       };
     } finally {
       await rm(temporary, { recursive: true, force: true });
@@ -226,8 +238,9 @@ export async function auditDependencies(root, lockfiles) {
     return {
       ...base,
       status: 'failed',
-      reason:
-        'Audit dependency gagal (unduhan, checksum, jaringan, timeout, atau output engine). Tidak ada kesimpulan aman.',
+      reason: offlineDatabase
+        ? 'Audit dependency offline gagal (cache, checksum, timeout, atau output engine). Tidak ada fallback jaringan atau kesimpulan aman.'
+        : 'Audit dependency gagal (unduhan, checksum, jaringan, timeout, atau output engine). Tidak ada kesimpulan aman.',
     };
   }
 }

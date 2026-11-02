@@ -1,8 +1,8 @@
 # Sentinel Security Scanner
 
-Sentinel memeriksa folder kode PHP, JavaScript, atau TypeScript dari terminal. CLI menyediakan **pemeriksaan pola cepat** dan **audit dependency melalui OSV dengan opsi `--dependencies`**. Cukup clone Sentinel dan jalankan dengan Node.js; tidak perlu menyiapkan GitHub Actions, Supabase, Docker, atau `pnpm`.
+Sentinel memeriksa folder kode PHP, JavaScript, atau TypeScript dari terminal. CLI menyediakan **pemeriksaan pola cepat**, **mode multi-engine offline**, serta **audit OSV online opsional**. Tidak perlu menyiapkan GitHub Actions, Supabase, atau Docker. Mode cepat cukup memakai Node.js; mode offline memerlukan cache engine/database dan runtime yang dapat menjalankan engine tersebut.
 
-> **Cakupan terbatas:** Semgrep, Gitleaks, dan Composer Audit belum terhubung ke CLI lokal. OSV berjalan hanya jika `--dependencies` diberikan. Tidak ada temuan bukan bukti bahwa repository aman.
+> **Status Windows:** Gitleaks dan audit OSV offline telah diuji. Semgrep native gagal dengan `socketpair` pada komputer pengujian, sehingga scan ketiga engine belum berhasil penuh di Windows ini. Panduan [aktivasi WSL dan penggunaan offline](docs/WSL_OFFLINE_SETUP.md) tersedia; Semgrep di WSL masih perlu diverifikasi setelah WSL aktif. Tidak ada temuan bukan bukti bahwa repository aman.
 
 ## 1. Siapkan Node.js dan clone Sentinel
 
@@ -73,7 +73,31 @@ Artinya pola yang perlu ditinjau ditemukan di baris 3 `positive.js`. Buka file t
 
 Di PowerShell, lihat exit code perintah terakhir dengan `$LASTEXITCODE`. Bantuan singkat tersedia lewat `node .\sentinel.mjs --help`.
 
-## Audit paket dan kandidat versi perbaikan
+## Scan offline tanpa mengirim data repository
+
+Pisahkan persiapan internet dari pemindaian repository. Jalankan dari folder Sentinel:
+
+```powershell
+node .\sentinel.mjs prepare-offline
+```
+
+Perintah ini mengunduh Semgrep core 1.182.0, Gitleaks 8.30.1, OSV-Scanner 2.7.0, dan **seluruh database advisory publik npm/Packagist**. Unduhan berukuran beberapa ratus MB. Perintah tidak menerima path aplikasi atau mengirim nama/versi paket pengguna. Archive tool diverifikasi memakai SHA-256 yang dikunci dari rilis resmi; snapshot database memakai generation dan checksum metadata publik, lalu SHA-256 lokal disimpan untuk pemeriksaan integritas.
+
+Setelah cache siap:
+
+```powershell
+node .\sentinel.mjs scan '..\nama-repository-anda' --offline --output '.\report-offline.json'
+```
+
+`--offline` memakai cache lokal dan tidak melakukan unduhan atau query advisory online. Jika cache hilang/rusak, engine diberi status gagal; tidak ada fallback online. Semgrep core memakai rules Sentinel lokal yang digest-nya diverifikasi, Gitleaks memakai konfigurasi lokal dengan redaksi secret, dan OSV memakai `--offline` dengan snapshot database yang diverifikasi. Script/build/install aplikasi tidak dijalankan. Tanggal snapshot database ditampilkan karena advisory setelah tanggal itu belum tercakup.
+
+Laporan mencatat hasil setiap engine. Engine gagal menghasilkan `SEBAGIAN GAGAL` dan exit code `2`, meskipun engine lain menghasilkan temuan. Gitleaks memeriksa working tree, termasuk file lokal seperti `.env`; **riwayat Git belum diperiksa**. File besar, symlink, serta folder dependency/build berada di luar cakupan. Rules Semgrep yang disertakan masih terbatas. Mode ini tidak menjamin seluruh kerentanan ditemukan.
+
+Pada Windows gunakan `tar.exe` bawaan. Linux memerlukan `tar` dan `unzip`, serta glibc yang kompatibel dengan wheel Semgrep (Ubuntu 24.04 memenuhi prasyarat versi glibc). Pemetaan artifact tersedia untuk Windows x64, Linux x64/ARM64, dan macOS x64/ARM64; keberhasilan engine pada Linux/macOS belum diuji di sesi ini. Untuk kendala Semgrep Windows, ikuti [panduan WSL](docs/WSL_OFFLINE_SETUP.md).
+
+Untuk memperbarui snapshot, jalankan kembali `prepare-offline` saat internet tersedia. Snapshot lama tetap berada di cache. Jangan menggabungkan `--offline` dengan `--dependencies`; CLI menolak kombinasi tersebut.
+
+## Audit paket online dan kandidat versi perbaikan
 
 Jalankan dari folder Sentinel:
 
@@ -99,13 +123,14 @@ Tabel menampilkan maksimal 20 temuan source dan 20 advisory agar terminal tetap 
 
 Mode `local-quick` memeriksa pola eksekusi dinamis dan query SQL mentah pada PHP, serta evaluasi kode dan pemanggilan shell pada JavaScript/TypeScript. Folder `.git`, `.sentinel-cache`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`, `.output`, dan symlink dilewati. File lebih dari 1 MiB dilewati; scan berhenti jika mencapai 10.000 file atau 1.000 temuan.
 
-Pola teks bisa cocok dengan komentar, string, atau contoh kode. Report menandai mode `local-quick` dengan `coverage: limited`; hasil OSV tercatat terpisah dalam `dependencyAudit`. Semgrep, Gitleaks, dan Composer Audit belum terhubung. Saran pencegahan berasal dari pemetaan aturan yang tetap, tanpa AI saat runtime. Rencana peningkatan ada di [rencana CLI lokal](docs/LOCAL_CLI_TASK_PLAN.md).
+Pola teks bisa cocok dengan komentar, string, atau contoh kode. Report menandai mode `local-quick` atau `local-offline` dengan `coverage: limited`; hasil OSV tercatat di `dependencyAudit`, Semgrep/Gitleaks di `sourceEngines`. Composer Audit terpisah belum dijalankan; advisory Composer lockfile dicakup OSV. Saran pencegahan berasal dari pemetaan aturan yang tetap, tanpa AI saat runtime. Rencana peningkatan ada di [rencana CLI lokal](docs/LOCAL_CLI_TASK_PLAN.md).
 
 ## Jika perintah tidak berjalan
 
 - **`node` tidak dikenali:** pasang Node.js 22.12.0 atau lebih baru, lalu buka ulang PowerShell.
 - **Folder target tidak ditemukan:** pastikan path setelah `scan` adalah folder yang ada; gunakan tanda kutip jika path mengandung spasi.
 - **File report sudah ada:** pakai nama baru setelah `--output`. Sentinel sengaja tidak menimpa hasil lama.
-- **Menemukan nol pola:** baca ringkasan cakupan. Tambahkan `--dependencies` untuk advisory; deteksi secret oleh Gitleaks belum tersedia di CLI.
+- **Menemukan nol pola:** baca ringkasan cakupan. Untuk Gitleaks dan advisory tanpa query keluar gunakan `--offline` setelah `prepare-offline`.
+- **Semgrep gagal pada Windows:** hasil tetap sebagian gagal; ikuti [panduan WSL](docs/WSL_OFFLINE_SETUP.md), lalu verifikasi hasil scan pada Linux.
 
-Untuk pengembang yang ingin memeriksa CLI, jalankan `node --test tests/local-cli.test.mjs tests/local-report.test.mjs`. Hasil pengujian terakhir ada di [ringkasan pengujian](docs/LOCAL_CLI_TEST_SUMMARY.md). Source dashboard, Supabase, dan workflow GitHub dari tahap sebelumnya masih ada di repo, tetapi tidak diperlukan untuk langkah terminal di atas.
+Untuk pengembang yang ingin memeriksa CLI, jalankan `pnpm test:cli` (memerlukan dependensi pengembangan) atau `node --test tests/local-cli.test.mjs tests/local-report.test.mjs tests/offline.test.mjs`. Hasil pengujian terakhir ada di [ringkasan pengujian](docs/LOCAL_CLI_TEST_SUMMARY.md). Source dashboard, Supabase, dan workflow GitHub dari tahap sebelumnya masih ada di repo, tetapi tidak diperlukan untuk langkah terminal di atas.
