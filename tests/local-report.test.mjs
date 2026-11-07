@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { dependencyUpdates } from '../cli/dependency-updates.mjs';
 import { auditDependencies, parseDependencyOutput } from '../cli/dependencies.mjs';
 import { renderReport } from '../cli/report.mjs';
 
@@ -92,6 +95,134 @@ const report = {
   skippedLargeFiles: 0,
   dependencyAudit: { status: 'not_requested', findings: [] },
 };
+
+test('offline update plans follow npm importers and the installed versions of nested dependencies', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'sentinel-updates-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const lockfile = path.join(directory, 'package-lock.json');
+  const manifest = path.join(directory, 'package.json');
+  const rootManifest = {
+    dependencies: { diagram: '^1.0.0', parser: '^8.0.0' },
+    devDependencies: { utility: '^3.0.0' },
+  };
+  const lock = JSON.stringify({
+    packages: {
+      '': rootManifest,
+      'node_modules/diagram': { version: '1.2.0', dependencies: { math: '^0.16.0' } },
+      'node_modules/math': { version: '0.16.3' },
+      'node_modules/parser': { version: '8.1.0', dependencies: { utility: '^2.0.0' } },
+      'node_modules/parser/node_modules/utility': { version: '2.0.1' },
+      'node_modules/utility': { version: '3.0.1' },
+      'apps/admin': { dependencies: { ui: '^2.0.0' } },
+      'node_modules/ui': { version: '2.1.0' },
+    },
+  });
+  await writeFile(lockfile, lock);
+  await writeFile(manifest, JSON.stringify(rootManifest));
+  const npmFinding = { file: 'package-lock.json', ecosystem: 'npm', advisoryId: 'GHSA-test-0001' };
+  const findings = [
+    { ...npmFinding, package: 'math', version: '0.16.3', fixedVersions: ['0.18.2'] },
+    { ...npmFinding, package: 'utility', version: '2.0.1', fixedVersions: ['2.0.2'] },
+    { ...npmFinding, package: 'utility', version: '3.0.1', fixedVersions: ['3.0.2'] },
+    { ...npmFinding, package: 'ui', version: '2.1.0', fixedVersions: ['2.2.0'] },
+  ];
+  const [math, nested, direct, workspace] = await dependencyUpdates(
+    directory,
+    [lockfile],
+    findings,
+  );
+  assert.equal(math.kind, 'transitive');
+  assert.deepEqual(math.parents, [
+    { package: 'diagram', range: '^0.16.0', outsideRange: ['0.18.2'] },
+  ]);
+  assert.equal(nested.kind, 'transitive');
+  assert.deepEqual(nested.parents, [{ package: 'parser', range: '^2.0.0' }]);
+  assert.equal(nested.updateCommand, undefined);
+  assert.equal(direct.kind, 'direct');
+  assert.match(direct.updateCommand, /^npm install utility@3\.0\.2 --save-dev --save-exact/);
+  assert.equal(workspace.declarations[0].manifest, 'apps/admin/package.json');
+  assert.equal(workspace.updateCommand, undefined);
+  assert.equal(await readFile(lockfile, 'utf8'), lock);
+  assert.equal(await readFile(manifest, 'utf8'), JSON.stringify(rootManifest));
+  const terminal = renderReport({
+    ...report,
+    dependencyAudit: {
+      status: 'success',
+      findings: findings.map((finding) => ({
+        ...finding,
+        severity: 'low',
+        reference: 'https://osv.dev/',
+      })),
+      updates: [math, nested, direct, workspace],
+    },
+  });
+  assert.match(terminal, /LANGKAH UPDATE MANUAL/);
+  assert.match(terminal, /Induk: diagram \(\^0\.16\.0\)/);
+  assert.match(terminal, /Di luar rentang induk: 0\.18\.2/);
+  assert.match(terminal, /npm explain math/);
+  assert.match(terminal, /GHSA-test-0001: 0\.18\.2/);
+});
+
+test('Composer uses its parent data and pnpm and Yarn label uncertain workspace declarations', async (t) => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'sentinel-updates-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await mkdir(path.join(directory, 'php'));
+  await writeFile(
+    path.join(directory, 'package.json'),
+    JSON.stringify({ dependencies: { demo: '^1.0.0' } }),
+  );
+  await writeFile(
+    path.join(directory, 'php/composer.json'),
+    JSON.stringify({ require: { 'test/parent': '^1.0' } }),
+  );
+  const lockfiles = ['pnpm-lock.yaml', 'yarn.lock', 'php/composer.lock'].map((file) =>
+    path.join(directory, file),
+  );
+  await writeFile(
+    lockfiles[2],
+    JSON.stringify({
+      packages: [
+        {
+          name: 'test/parent',
+          require: { 'test/child': 'https://user:secret@example.invalid/repo' },
+        },
+      ],
+    }),
+  );
+  const finding = {
+    ecosystem: 'npm',
+    package: 'demo',
+    version: '1.0.0',
+    advisoryId: 'GHSA-test-0001',
+    fixedVersions: [],
+  };
+  const updates = await dependencyUpdates(directory, lockfiles, [
+    { ...finding, file: 'pnpm-lock.yaml' },
+    { ...finding, file: 'pnpm-lock.yaml', advisoryId: 'GHSA-test-0002', fixedVersions: ['1.0.1'] },
+    { ...finding, file: 'yarn.lock', package: 'unsafe;command' },
+    { ...finding, file: 'php/composer.lock', ecosystem: 'Packagist', package: 'test/child' },
+    {
+      ...finding,
+      file: 'php/composer.lock',
+      ecosystem: 'Packagist',
+      package: 'test/parent',
+      fixedVersions: ['1.0.1'],
+    },
+  ]);
+  const [pnpm, yarn, composerChild, composerParent] = updates;
+  assert.equal(updates.length, 4);
+  assert.equal(pnpm.kind, 'declared');
+  assert.equal(pnpm.advisories.length, 2);
+  assert.deepEqual(pnpm.commands, ['pnpm why --recursive demo']);
+  assert.equal(pnpm.updateCommand, undefined);
+  assert.equal(yarn.kind, 'unknown');
+  assert.deepEqual(yarn.commands, []);
+  assert.deepEqual(composerChild.parents, [{ package: 'test/parent', range: null }]);
+  assert.deepEqual(composerChild.commands, ['composer why --tree --locked test/child']);
+  assert.match(composerChild.steps[0], /changelog/);
+  assert.match(composerParent.updateCommand, /^composer require test\/parent:1\.0\.1/);
+  assert.doesNotMatch(JSON.stringify(updates), /example\.invalid|user:secret/);
+});
 
 test('terminal report wraps tables and shows summary, prevention and honest dependency coverage', () => {
   const result = renderReport(report, 80);

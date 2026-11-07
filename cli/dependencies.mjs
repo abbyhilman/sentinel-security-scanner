@@ -5,6 +5,7 @@ import { createReadStream } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { dependencyUpdates } from './dependency-updates.mjs';
 
 const execute = promisify(execFile);
 export const osvVersion = '2.7.0';
@@ -230,6 +231,9 @@ export async function auditDependencies(root, lockfiles, { offlineDatabase } = {
         checkedAt: new Date().toISOString(),
         lockfileCount: lockfiles.length,
         networkMode: offlineDatabase ? 'offline' : 'online',
+        ...(offlineDatabase
+          ? { updates: await dependencyUpdates(root, lockfiles, parsed.findings) }
+          : {}),
       };
     } finally {
       await rm(temporary, { recursive: true, force: true });

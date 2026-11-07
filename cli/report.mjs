@@ -67,6 +67,58 @@ function table(headers, rows, widths) {
   return lines.join('\n');
 }
 
+function renderDependencyUpdates(updates, width) {
+  const labels = {
+    direct: 'Langsung',
+    transitive: 'Transitif',
+    declared: 'Dideklarasikan; verifikasi versi dan workspace',
+    unknown: 'Rantai dependency belum diketahui',
+  };
+  const lines = ['', 'LANGKAH UPDATE MANUAL (jalankan dari folder lockfile)'];
+  for (const update of updates.slice(0, 10)) {
+    lines.push(
+      '',
+      ...wrap(
+        `${update.package}@${update.version} — ${labels[update.kind]} (${update.file})`,
+        width,
+      ),
+    );
+    for (const { advisoryId, fixedVersions } of update.advisories.slice(0, 3))
+      lines.push(
+        ...wrap(`  ${advisoryId}: ${fixedVersions.join(', ') || 'Fix belum diketahui'}`, width),
+      );
+    if (update.advisories.length > 3)
+      lines.push(`  ${update.advisories.length - 3} advisory lain tersedia di JSON.`);
+    for (const { manifest, section, range } of update.declarations)
+      lines.push(
+        ...wrap(`  Deklarasi: ${manifest} (${section}${range ? `, ${range}` : ''})`, width),
+      );
+    for (const parent of update.parents.slice(0, 5)) {
+      lines.push(
+        ...wrap(`  Induk: ${parent.package}${parent.range ? ` (${parent.range})` : ''}`, width),
+      );
+      if (parent.outsideRange?.length)
+        lines.push(...wrap(`    Di luar rentang induk: ${parent.outsideRange.join(', ')}`, width));
+    }
+    if (update.parents.length > 5)
+      lines.push(`  ${update.parents.length - 5} induk lain tersedia di JSON.`);
+    for (const command of update.commands) lines.push(`  Telusuri: ${safe(command)}`);
+    for (const step of update.steps) lines.push(...wrap(`  - ${step}`, width));
+    if (update.updateCommand)
+      lines.push(`  Contoh setelah verifikasi: ${safe(update.updateCommand)}`);
+  }
+  if (updates.length > 10)
+    lines.push(`${updates.length - 10} rencana lain: gunakan --output untuk hasil lengkap.`);
+  lines.push(
+    '',
+    ...wrap(
+      'Periksa batas versi paket induk, runtime, dan peer dependency. Perintah update manual mungkin memerlukan registry atau cache paket.',
+      width,
+    ),
+  );
+  return lines;
+}
+
 export function renderReport(report, columns = 100) {
   const width = Math.max(60, Math.min(columns, 120));
   const lines = ['SENTINEL - HASIL PEMERIKSAAN', ''];
@@ -184,6 +236,7 @@ export function renderReport(report, columns = 100) {
       'regenerasi lockfile melalui package manager proyek, lalu jalankan test aplikasi dan audit ulang.',
       'Versi prerelease atau fix yang tidak tercatat perlu pemeriksaan manual.',
     );
+    if (audit.updates?.length) lines.push(...renderDependencyUpdates(audit.updates, width));
   }
   lines.push('', 'PENCEGAHAN DAN TINDAK LANJUT');
   const ruleIds = [...new Set(report.findings.map((finding) => finding.ruleId))];

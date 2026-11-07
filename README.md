@@ -93,6 +93,16 @@ node sentinel.mjs scan /mnt/d/Projects/aplikasi-saya --offline --output ./report
 
 Laporan mencatat hasil setiap engine. Engine gagal menghasilkan `SEBAGIAN GAGAL` dan exit code `2`, meskipun engine lain menghasilkan temuan. Gitleaks memeriksa working tree, termasuk file lokal seperti `.env`; **riwayat Git belum diperiksa**. File besar, symlink, serta folder dependency/build berada di luar cakupan. Rules Semgrep yang disertakan masih terbatas. Mode ini tidak menjamin seluruh kerentanan ditemukan.
 
+### Membaca langkah update
+
+Bagian **Langkah update manual** mengelompokkan advisory berdasarkan lockfile, paket, dan versi terpasang. Setiap advisory menampilkan kandidat versi perbaikannya dari snapshot OSV. Jika versi belum diketahui, periksa advisory dan changelog sebelum memilih tindakan.
+
+- **Langsung.** Periksa manifest dan bagian deklarasi yang ditampilkan, misalnya `devDependencies`. Pilih versi yang kompatibel dengan runtime dan peer dependency, lalu update deklarasi. Jika satu kandidat yang sama tercatat untuk semua advisory pada dependency langsung npm atau Composer, Sentinel dapat menampilkan contoh perintah untuk dijalankan setelah verifikasi.
+- **Transitif.** Sentinel membaca paket induk dari lockfile npm modern dan Composer. Untuk rentang npm sederhana seperti `^0.16.47`, laporan juga menandai kandidat yang berada di luar rentang induk. Jalankan perintah penelusuran yang ditampilkan, lalu cari rilis paket induk yang sudah menerima versi perbaikan. Misalnya, jika `mermaid` masih membatasi `katex` ke cabang lama, periksa versi `mermaid` yang menerima versi perbaikan.
+- **Rantai belum dipastikan.** Pada pnpm, Yarn, atau lockfile npm lama, pakai perintah penelusuran yang ditampilkan untuk memastikan versi dan workspace pemiliknya. Deklarasi di manifest sebelah lockfile bisa berbeda dengan dependency yang dipakai workspace lain.
+
+Jalankan langkah manual dari folder lockfile yang tercantum. Setelah update, tinjau diff lockfile, jalankan tes aplikasi, lalu scan ulang. Scan hanya membaca target. Perintah update yang dijalankan sendiri bisa memerlukan registry atau cache paket. Pakai `--output` untuk menyimpan seluruh rencana di `dependencyAudit.updates`.
+
 Linux memerlukan glibc yang kompatibel dengan wheel Semgrep. Pengujian ketiga engine memakai Ubuntu 24.04 x64 di WSL 2 dan Node.js Linux 24.22.2.
 
 Untuk memperbarui snapshot, jalankan kembali `prepare-offline` saat internet tersedia. Snapshot lama tetap berada di cache. Jangan menggabungkan `--offline` dengan `--dependencies`; CLI menolak kombinasi tersebut.
