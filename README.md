@@ -91,6 +91,12 @@ node sentinel.mjs scan /mnt/d/Projects/aplikasi-saya --offline --output ./report
 
 `--offline` memakai cache lokal dan tidak melakukan unduhan atau query advisory online. Jika cache hilang/rusak, engine diberi status gagal; tidak ada fallback online. Semgrep core memakai rules Sentinel lokal yang digest-nya diverifikasi, Gitleaks memakai konfigurasi lokal dengan redaksi secret, dan OSV memakai `--offline` dengan snapshot database yang diverifikasi. Script/build/install aplikasi tidak dijalankan. Tanggal snapshot database ditampilkan karena advisory setelah tanggal itu belum tercakup.
 
+Tambahkan `--skip-worktrees` untuk melewati linked Git worktree yang berada di dalam folder target. Semua engine memakai pengecualian yang sama, termasuk audit lockfile. Folder `tmp` biasa tetap dipindai. Sentinel mengenali penanda `.git` milik linked worktree dan mencantumkan path yang dilewati di terminal serta `skippedWorktrees` pada JSON. Jika linked worktree dipilih sebagai target langsung, Sentinel tetap memindai target tersebut.
+
+```bash
+node sentinel.mjs scan /mnt/d/Projects/aplikasi-saya --offline --skip-worktrees
+```
+
 Laporan mencatat hasil setiap engine. Engine gagal menghasilkan `SEBAGIAN GAGAL` dan exit code `2`, meskipun engine lain menghasilkan temuan. Gitleaks memeriksa working tree, termasuk file lokal seperti `.env`; **riwayat Git belum diperiksa**. File besar, symlink, serta folder dependency/build berada di luar cakupan. Rules Semgrep yang disertakan masih terbatas. Mode ini tidak menjamin seluruh kerentanan ditemukan.
 
 ### Membaca langkah update

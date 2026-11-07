@@ -305,7 +305,22 @@ export function parseOfflineFindings(engine, raw, root) {
   };
 }
 
-export async function runOfflineSourceEngine(engine, root, files) {
+function gitleaksConfig(skippedWorktrees) {
+  const paths = [
+    String.raw`(^|[/\\])(\.git|\.sentinel-cache|node_modules|vendor|dist|build|coverage|\.next|\.output)([/\\]|$)`,
+    ...skippedWorktrees.map((directory) => {
+      const separator = process.platform === 'win32' ? String.raw`[/\\]` : '/';
+      const literalPath = directory
+        .split(path.sep)
+        .map((part) => part.replace(/[.*+?^$(){}|[\]\\]/g, '\\$&'))
+        .join(separator);
+      return `^${literalPath}(${separator}|$)`;
+    }),
+  ];
+  return `title="Sentinel offline"\n[extend]\nuseDefault=true\n[[allowlists]]\npaths=${JSON.stringify(paths)}\n`;
+}
+
+export async function runOfflineSourceEngine(engine, root, files, skippedWorktrees = []) {
   const version = engine === 'semgrep' ? semgrepVersion : gitleaksVersion;
   const base = { engine, version, findings: [] };
   if (engine === 'semgrep' && !files.length)
@@ -326,11 +341,7 @@ export async function runOfflineSourceEngine(engine, root, files) {
     };
     if (engine === 'gitleaks') {
       const config = path.join(temporary, 'gitleaks.toml');
-      await writeFile(
-        config,
-        'title="Sentinel offline"\n[extend]\nuseDefault=true\n[[allowlists]]\npaths=[\'(^|[/\\\\])(\\.git|\\.sentinel-cache|node_modules|vendor|dist|build|coverage|\\.next|\\.output)([/\\\\]|$)\']\n',
-        { flag: 'wx' },
-      );
+      await writeFile(config, gitleaksConfig(skippedWorktrees), { flag: 'wx' });
       const { stdout } = await execute(
         executable,
         [

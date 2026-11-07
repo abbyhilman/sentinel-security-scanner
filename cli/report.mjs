@@ -125,6 +125,14 @@ export function renderReport(report, columns = 100) {
   const sourceEngines = report.sourceEngines ?? [];
   if (report.networkMode === 'offline')
     lines.push('Mode OFFLINE: cache lokal; tanpa unduhan atau query advisory.', '');
+  if (report.skippedWorktrees) {
+    lines.push(`Linked worktree dilewati: ${report.skippedWorktrees.length}.`);
+    for (const directory of report.skippedWorktrees.slice(0, 10))
+      lines.push(...wrap(`  - ${directory}`, width));
+    if (report.skippedWorktrees.length > 10)
+      lines.push('Gunakan --output untuk daftar worktree lengkap.');
+    lines.push('');
+  }
   lines.push('TEMUAN SOURCE (kecocokan pola; status: perlu review)');
   if (!report.findings.length) lines.push('Tidak ada kecocokan pola pada file yang diperiksa.');
   else

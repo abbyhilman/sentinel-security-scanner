@@ -96,6 +96,40 @@ test('extra positional path is rejected', () => {
   assert.equal(run('scan', '--output').status, 2);
   assert.equal(run('scan', '--output', '--help').status, 2);
   assert.equal(run('scan', '--dependencies', '--dependencies').status, 2);
+  assert.equal(run('scan', '--skip-worktrees', '--skip-worktrees').status, 2);
+});
+
+test('skip-worktrees omits only nested linked worktrees and reports their paths', async () => {
+  await inTempDirectory(async (directory) => {
+    const linked = 'tmp/review [1]';
+    const sibling = 'tmp/review [1]-notes';
+    const submodule = 'modules/widget';
+    for (const folder of [linked, sibling, submodule]) {
+      await mkdir(path.join(directory, folder), { recursive: true });
+      await writeFile(path.join(directory, folder, 'check.js'), 'eval(input);\n');
+    }
+    await writeFile(
+      path.join(directory, linked, '.git'),
+      'gitdir: D:\\repo\\.git\\worktrees\\review [1]\r\n',
+    );
+    await writeFile(path.join(directory, submodule, '.git'), 'gitdir: ../../.git/modules/widget\n');
+    const output = path.join(directory, 'report.json');
+    const result = run('scan', directory, '--skip-worktrees', '--output', output);
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /Linked worktree dilewati: 1/);
+    const report = JSON.parse(await readFile(output, 'utf8'));
+    assert.deepEqual(report.skippedWorktrees, [linked]);
+    assert.deepEqual(
+      report.findings.map((finding) => finding.file),
+      [`${submodule}/check.js`, `${sibling}/check.js`],
+    );
+    assert.equal(report.scannedFiles, 2);
+    assert.match(run('scan', directory).stdout, /3 temuan source/);
+    assert.match(
+      run('scan', path.join(directory, linked), '--skip-worktrees').stdout,
+      /1 temuan source/,
+    );
+  });
 });
 
 test('dependency audit with no lockfile is explicitly skipped without downloading an engine', () => {

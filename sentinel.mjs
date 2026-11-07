@@ -51,7 +51,7 @@ const rules = [
 
 function usage() {
   console.log(
-    'Sentinel CLI lokal\n\n  node sentinel.mjs prepare-offline\n  node sentinel.mjs scan [folder] [--offline | --dependencies] [--output report.json]\n  node sentinel.mjs --help\n\nprepare-offline: unduh tool dan database publik tanpa membaca target repository.\n--offline: jalankan Semgrep, Gitleaks, dan OSV dari cache tanpa unduhan atau query keluar.\n--dependencies: audit ONLINE, identitas dan versi paket dikirim ke layanan OSV.\nExit code: 0 tidak ada temuan, 1 ada temuan, 2 gagal (termasuk salah satu engine gagal).',
+    'Sentinel CLI lokal\n\n  node sentinel.mjs prepare-offline\n  node sentinel.mjs scan [folder] [--offline | --dependencies] [--skip-worktrees] [--output report.json]\n  node sentinel.mjs --help\n\nprepare-offline: unduh tool dan database publik tanpa membaca target repository.\n--offline: jalankan Semgrep, Gitleaks, dan OSV dari cache tanpa unduhan atau query keluar.\n--skip-worktrees: lewati linked Git worktree di dalam folder target.\n--dependencies: audit ONLINE, identitas dan versi paket dikirim ke layanan OSV.\nExit code: 0 tidak ada temuan, 1 ada temuan, 2 gagal (termasuk salah satu engine gagal).',
   );
 }
 
@@ -60,12 +60,14 @@ function argumentsForScan(args) {
   let output;
   let dependencies = false;
   let offline = false;
+  let skipWorktrees = false;
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
     if (value === '--output' && args[index + 1] && !args[index + 1].startsWith('-') && !output)
       output = args[++index];
     else if (value === '--dependencies' && !dependencies) dependencies = true;
     else if (value === '--offline' && !offline) offline = true;
+    else if (value === '--skip-worktrees' && !skipWorktrees) skipWorktrees = true;
     else if (!value.startsWith('-') && target === undefined) target = value;
     else throw new Error('Argumen tidak dikenal. Jalankan node sentinel.mjs --help.');
   }
@@ -76,18 +78,34 @@ function argumentsForScan(args) {
     output: output && path.resolve(output),
     dependencies,
     offline,
+    skipWorktrees,
   };
 }
 
-async function collectFiles(root) {
+async function isLinkedWorktree(directory, entries) {
+  if (!entries.some((entry) => entry.name === '.git' && entry.isFile())) return false;
+  const marker = path.join(directory, '.git');
+  const info = await lstat(marker);
+  if (!info.isFile() || info.size > 64 * 1024) return false;
+  const content = (await readFile(marker, 'utf8')).trimEnd().replaceAll('\\', '/');
+  return /^gitdir: (?:[^\r\n]*\/)?worktrees\/[^/\r\n]+$/u.test(content);
+}
+
+async function collectFiles(root, skipWorktrees) {
   const files = [];
   const lockfiles = [];
+  const skippedWorktrees = [];
   const stack = [root];
   let skipped = 0;
   let skippedDirectories = 0;
   while (stack.length) {
     const directory = stack.pop();
     const entries = await readdir(directory, { withFileTypes: true });
+    if (skipWorktrees && directory !== root && (await isLinkedWorktree(directory, entries))) {
+      skippedWorktrees.push(directory);
+      skippedDirectories++;
+      continue;
+    }
     for (const entry of entries) {
       if (entry.isSymbolicLink()) {
         skipped++;
@@ -109,14 +127,26 @@ async function collectFiles(root) {
       }
     }
   }
-  return { files: files.sort(), lockfiles: lockfiles.sort(), skipped, skippedDirectories };
+  return {
+    files: files.sort(),
+    lockfiles: lockfiles.sort(),
+    skipped,
+    skippedDirectories,
+    skippedWorktrees: skippedWorktrees.sort(),
+  };
 }
 
-async function scan(root, output, dependencies, offline) {
+async function scan(root, { output, dependencies, offline, skipWorktrees }) {
   const rootInfo = await lstat(root);
   if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink())
     throw new Error('Target harus folder lokal biasa.');
-  const { files, lockfiles, skipped: skippedLinks, skippedDirectories } = await collectFiles(root);
+  const {
+    files,
+    lockfiles,
+    skipped: skippedLinks,
+    skippedDirectories,
+    skippedWorktrees,
+  } = await collectFiles(root, skipWorktrees);
   const findings = [];
   const sourceFiles = [];
   let skippedLargeFiles = 0;
@@ -150,7 +180,7 @@ async function scan(root, output, dependencies, offline) {
   if (offline) {
     for (const engine of ['semgrep', 'gitleaks']) {
       console.error(`Menjalankan ${engine} lokal dari cache...`);
-      sourceEngines.push(await runOfflineSourceEngine(engine, root, sourceFiles));
+      sourceEngines.push(await runOfflineSourceEngine(engine, root, sourceFiles, skippedWorktrees));
     }
   }
   const dependencyAudit = offline
@@ -171,6 +201,13 @@ async function scan(root, output, dependencies, offline) {
     skippedLargeFiles,
     skippedLinks,
     skippedDirectories,
+    ...(skipWorktrees
+      ? {
+          skippedWorktrees: skippedWorktrees.map((directory) =>
+            path.relative(root, directory).split(path.sep).join('/'),
+          ),
+        }
+      : {}),
     findings,
     guidance: Object.fromEntries(
       [...new Set(findings.map((finding) => finding.ruleId))].map((id) => [id, guidance[id]]),
@@ -215,8 +252,8 @@ else if (command === 'prepare-offline') {
   }
 } else if (command === 'scan') {
   try {
-    const { target, output, dependencies, offline } = argumentsForScan(args);
-    await scan(target, output, dependencies, offline);
+    const { target, ...options } = argumentsForScan(args);
+    await scan(target, options);
   } catch (error) {
     console.error(
       'Sentinel gagal:',

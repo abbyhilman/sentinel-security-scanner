@@ -128,6 +128,8 @@ Write-Output "Exit code $LASTEXITCODE"
 if (Test-Path -LiteralPath $reportPath) { Write-Output "Report $reportPath" }
 ```
 
+Tambahkan `--skip-worktrees` setelah `--offline` jika ingin melewati linked Git worktree di dalam folder target. Folder `tmp` lain tetap dipindai.
+
 Jika `unshare` menampilkan `Operation not permitted`, sesi Ubuntu Anda tidak punya izin membuat namespace jaringan. Untuk menjalankan mode cache lokal tanpa isolasi dari OS, hapus `unshare --net --` dari perintah dan tetap gunakan `--offline`. Gunakan sesi yang berizin jika isolasi jaringan dari OS menjadi syarat.
 
 Periksa status masing-masing engine. Exit code `0` berarti pemeriksaan selesai tanpa temuan pada cakupannya. Exit code `1` berarti pemeriksaan selesai dengan temuan untuk ditinjau. Exit code `2` menandakan kegagalan perintah atau engine. JSON tersimpan di folder cache Sentinel.
