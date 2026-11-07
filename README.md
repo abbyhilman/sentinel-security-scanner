@@ -2,7 +2,7 @@
 
 Sentinel memeriksa folder kode PHP, JavaScript, atau TypeScript dari terminal. CLI menyediakan **pemeriksaan pola cepat**, **mode multi-engine offline**, serta **audit OSV online opsional**. Tidak perlu menyiapkan GitHub Actions, Supabase, atau Docker. Mode cepat cukup memakai Node.js; mode offline memerlukan cache engine/database dan runtime yang dapat menjalankan engine tersebut.
 
-> **Status Windows:** Gitleaks dan audit OSV offline telah diuji. Semgrep native gagal dengan `socketpair` pada komputer pengujian, sehingga scan ketiga engine belum berhasil penuh di Windows ini. Panduan [aktivasi WSL dan penggunaan offline](docs/WSL_OFFLINE_SETUP.md) tersedia; Semgrep di WSL masih perlu diverifikasi setelah WSL aktif. Tidak ada temuan bukan bukti bahwa repository aman.
+> **Scan offline di Windows:** Semgrep, Gitleaks, dan OSV berhasil diuji melalui WSL 2 dengan Ubuntu 24.04 x64. Pada Windows native, Semgrep gagal dengan `socketpair` di mesin uji. Ikuti panduan untuk mengaktifkan WSL dan menjalankan ketiga engine. [Panduan WSL](docs/WSL_OFFLINE_SETUP.md)
 
 ## 1. Siapkan Node.js dan clone Sentinel
 
@@ -75,25 +75,25 @@ Di PowerShell, lihat exit code perintah terakhir dengan `$LASTEXITCODE`. Bantuan
 
 ## Scan offline tanpa mengirim data repository
 
-Pisahkan persiapan internet dari pemindaian repository. Jalankan dari folder Sentinel:
+Di Windows, ikuti panduan WSL untuk menyiapkan runtime Linux, cache engine, dan isolasi jaringan yang dipakai pada pengujian. Jika Node.js Linux, `tar`, dan `unzip` sudah tersedia, buka terminal Ubuntu dan masuk ke folder Sentinel. [Panduan WSL](docs/WSL_OFFLINE_SETUP.md)
 
-```powershell
-node .\sentinel.mjs prepare-offline
+```bash
+node sentinel.mjs prepare-offline
 ```
 
 Perintah ini mengunduh Semgrep core 1.182.0, Gitleaks 8.30.1, OSV-Scanner 2.7.0, dan **seluruh database advisory publik npm/Packagist**. Unduhan berukuran beberapa ratus MB. Perintah tidak menerima path aplikasi atau mengirim nama/versi paket pengguna. Archive tool diverifikasi memakai SHA-256 yang dikunci dari rilis resmi; snapshot database memakai generation dan checksum metadata publik, lalu SHA-256 lokal disimpan untuk pemeriksaan integritas.
 
-Setelah cache siap:
+Setelah semua status persiapan menunjukkan `CACHED`, jalankan scan dengan path Linux ke repository lokal.
 
-```powershell
-node .\sentinel.mjs scan '..\nama-repository-anda' --offline --output '.\report-offline.json'
+```bash
+node sentinel.mjs scan /mnt/d/Projects/aplikasi-saya --offline --output ./report-offline.json
 ```
 
 `--offline` memakai cache lokal dan tidak melakukan unduhan atau query advisory online. Jika cache hilang/rusak, engine diberi status gagal; tidak ada fallback online. Semgrep core memakai rules Sentinel lokal yang digest-nya diverifikasi, Gitleaks memakai konfigurasi lokal dengan redaksi secret, dan OSV memakai `--offline` dengan snapshot database yang diverifikasi. Script/build/install aplikasi tidak dijalankan. Tanggal snapshot database ditampilkan karena advisory setelah tanggal itu belum tercakup.
 
 Laporan mencatat hasil setiap engine. Engine gagal menghasilkan `SEBAGIAN GAGAL` dan exit code `2`, meskipun engine lain menghasilkan temuan. Gitleaks memeriksa working tree, termasuk file lokal seperti `.env`; **riwayat Git belum diperiksa**. File besar, symlink, serta folder dependency/build berada di luar cakupan. Rules Semgrep yang disertakan masih terbatas. Mode ini tidak menjamin seluruh kerentanan ditemukan.
 
-Pada Windows gunakan `tar.exe` bawaan. Linux memerlukan `tar` dan `unzip`, serta glibc yang kompatibel dengan wheel Semgrep (Ubuntu 24.04 memenuhi prasyarat versi glibc). Pemetaan artifact tersedia untuk Windows x64, Linux x64/ARM64, dan macOS x64/ARM64; keberhasilan engine pada Linux/macOS belum diuji di sesi ini. Untuk kendala Semgrep Windows, ikuti [panduan WSL](docs/WSL_OFFLINE_SETUP.md).
+Linux memerlukan glibc yang kompatibel dengan wheel Semgrep. Pengujian ketiga engine memakai Ubuntu 24.04 x64 di WSL 2 dan Node.js Linux 24.22.2.
 
 Untuk memperbarui snapshot, jalankan kembali `prepare-offline` saat internet tersedia. Snapshot lama tetap berada di cache. Jangan menggabungkan `--offline` dengan `--dependencies`; CLI menolak kombinasi tersebut.
 
