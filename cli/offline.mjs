@@ -361,6 +361,7 @@ export async function runOfflineSourceEngine(engine, root, files) {
       };
     }
     if ((await hashFile(rules)) !== expectedRules) throw new Error('Ruleset Semgrep tidak cocok.');
+    const targetsFile = path.join(temporary, 'semgrep-targets.json');
     const findings = [];
     let errors = 0;
     const started = Date.now();
@@ -375,21 +376,29 @@ export async function runOfflineSourceEngine(engine, root, files) {
       });
       for (let offset = 0; offset < selected.length; offset += 20) {
         if (Date.now() - started > 180_000) throw new Error('Timeout Semgrep.');
+        const targets = selected.slice(offset, offset + 20).map((file) => [
+          'CodeTarget',
+          {
+            path: { fpath: file, ppath: `/${path.relative(root, file).split(path.sep).join('/')}` },
+            analyzer: language,
+            products: ['sast'],
+          },
+        ]);
+        await writeFile(targetsFile, JSON.stringify(['Targets', targets]), { mode: 0o600 });
         const { stdout } = await execute(
           executable,
           [
             '-rules',
             rules,
-            '-lang',
-            language,
+            '-targets',
+            targetsFile,
             '-j',
             '1',
-            '-json',
+            '-json_nodots',
             '-timeout',
             '5',
             '-max_memory',
             '1024',
-            ...selected.slice(offset, offset + 20),
           ],
           { ...options, timeout: Math.max(1000, 180_000 - (Date.now() - started)) },
         );
