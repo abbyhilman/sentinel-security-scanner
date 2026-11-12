@@ -10,6 +10,10 @@ Uji awal Windows x64 memakai Python 3.13.3, delapan tes Python, dan 20 tes CLI N
 
 Persiapan nyata dari cache kosong berhasil memverifikasi dan menyimpan engine native serta kedua database. Cache baru kemudian dipakai untuk audit contoh dengan path berspasi dan worktree sintetis. Panduan menghubungkan KaTeX ke Mermaid serta minimatch ke TypeScript ESLint dan menandai kandidat fix di luar rentang induk. Nama dan versi paket target tetap dibaca lokal pada tahap scan.
 
+Pengujian folder induk pasca-push menemukan nama direktori yang mengandung karakter Unicode format serta temuan Gitleaks tanpa nomor baris. Parser diperbaiki untuk mempertahankan path lokal yang tetap berada di target, meng-escape karakter kontrol/format saat ditampilkan, dan memakai `line: null` serta tanda `?` jika Gitleaks memberikan nomor baris nol. Kasus regresi ini ditambahkan ke pengujian Python.
+
+Fixture pnpm sintetis milik Sentinel ditolak OSV. Audit native kini memproses lockfile secara terpisah, mempertahankan hasil yang valid, dan melaporkan `failedLockfiles` serta status gagal jika sebagian file tidak dapat diaudit. Kegagalan satu lockfile tidak menghasilkan kesimpulan aman untuk file itu dan tidak membuang bukti dari lockfile lain.
+
 CI menjalankan tes Python melalui `python3 -m unittest discover -s tests -p test_native_scanner.py -v`. Hasil Quality dan pengujian pasca-push dicatat pada laporan tugas serta report lokal tersanitasi. Binary Linux/macOS tersedia pada pemetaan cache, tetapi uji langsung jalur Python saat implementasi dilakukan di Windows x64.
 
 Batas yang tetap berlaku meliputi pola source yang terbatas, false positive, snapshot advisory yang bertanggal, penelusuran workspace pnpm/Yarn yang membutuhkan verifikasi manual, dan riwayat Git yang belum diperiksa. Pemeliharaan versi engine harus memperbarui versi serta checksum bersamaan dan mengulang tes redaksi serta audit offline.

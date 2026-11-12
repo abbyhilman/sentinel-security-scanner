@@ -28,6 +28,8 @@ py -3 scanner.py 'D:\Projects\aplikasi-saya' --offline --skip-worktrees --output
 
 `python scanner.py ...` juga bisa dipakai jika perintah `python` di terminal sudah mengarah ke instalasi Python. Scan selalu memakai cache lokal, termasuk ketika `--offline` tidak ditulis. Cache yang hilang atau rusak menghasilkan status engine gagal dan exit code `2`. Command persiapan terpisah mencegah scan offline melakukan unduhan otomatis.
 
+Audit dilakukan per lockfile. Jika salah satu file tidak dapat dibaca OSV, hasil dari file lain tetap dipertahankan, status audit menjadi `FAILED`, dan daftar file tercatat di `failedLockfiles`. Nama file Unicode di-escape saat ditampilkan. Temuan tanpa nomor baris memakai `line: null` pada JSON dan `?` di terminal.
+
 Tabel menampilkan lokasi temuan, kandidat versi perbaikan, induk dependency jika dapat ditentukan dari lockfile, dan langkah update manual. File target dan dependency proyek tidak diubah. Nilai secret dan raw source tidak disertakan pada JSON atau terminal. Exit code `0` berarti selesai tanpa temuan pada cakupannya, `1` berarti ada temuan untuk ditinjau, dan `2` berarti ada kegagalan. JSON mencatat `mode: local-native-offline` dan status setiap engine.
 
 Pemeriksaan source Python memakai empat pola bawaan yang terbatas. **Semgrep tidak dijalankan pada jalur Python**, dan hasilnya ditandai `NOT_REQUESTED`. Gitleaks tetap memeriksa working tree termasuk file lokal seperti `.env`, sementara riwayat Git belum diperiksa. Composer lockfile diaudit melalui OSV; Composer Audit terpisah belum dijalankan. Dukungan binary mengikuti Windows, Linux, dan macOS x64/ARM64; uji langsung dilakukan di Windows x64. Waktu snapshot ditampilkan karena advisory yang lebih baru belum tercakup.

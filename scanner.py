@@ -366,9 +366,7 @@ def execute_json(args, folder, env=None, accepted_codes=(0, 1)):
 
 
 def relative_file(root, value):
-    if not isinstance(value, str) or any(
-        unicodedata.category(c).startswith("C") for c in value
-    ):
+    if not isinstance(value, str) or "\x00" in value:
         raise ValueError("Invalid finding path")
     file = Path(value)
     file = file if file.is_absolute() else root / file
@@ -451,18 +449,25 @@ def gitleaks(root, cache, excluded):
                     not isinstance(rule, str)
                     or not re.fullmatch(r"[A-Za-z0-9._-]{1,200}", rule)
                     or type(line) is not int
-                    or line < 1
+                    or line < 0
                 ):
                     raise ValueError("Invalid finding metadata")
                 result["findings"].append(
                     {
                         "engine": "gitleaks",
                         "file": relative_file(root, item["File"]),
-                        "line": line,
+                        "line": line if line else None,
                         "ruleId": rule,
                         "evidence": "review",
                     }
                 )
+        result["findings"].sort(
+            key=lambda finding: (
+                finding["file"],
+                finding["line"] or 0,
+                finding["ruleId"],
+            )
+        )
         result["status"] = "success"
     except (
         OSError,
@@ -779,6 +784,8 @@ def audit_dependencies(root, lockfiles, cache):
         "updates": [],
         "networkMode": "offline",
         "lockfileCount": len(lockfiles),
+        "checkedLockfileCount": 0,
+        "failedLockfiles": [],
         "packageCount": 0,
         "skippedLocalPackages": 0,
     }
@@ -799,36 +806,49 @@ def audit_dependencies(root, lockfiles, cache):
                 OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=str(folder),
                 OSV_SCALIBR_LOCAL_DB_CACHE_DIRECTORY=str(folder),
             )
-            for offset in range(0, len(lockfiles), 10):
-                selected = lockfiles[offset : offset + 10]
-                if any(
-                    not regular(file) or file.stat().st_size > 20 * 1024 * 1024
-                    for file in selected
+            for file in lockfiles:
+                try:
+                    if not regular(file) or file.stat().st_size > 20 * 1024 * 1024:
+                        raise ValueError("Invalid lockfile")
+                    args = [
+                        str(executable),
+                        "scan",
+                        "source",
+                        "--offline",
+                        "--format=json",
+                        "--all-packages",
+                        "--no-resolve",
+                        "--no-call-analysis=go",
+                        "--no-call-analysis=rust",
+                        "--config=" + str(config),
+                        "--lockfile",
+                        str(file),
+                    ]
+                    found, checked, skipped = parse_advisories(
+                        execute_json(args, temporary, env), root
+                    )
+                except (
+                    OSError,
+                    ValueError,
+                    KeyError,
+                    TypeError,
+                    StopIteration,
+                    subprocess.SubprocessError,
                 ):
-                    raise ValueError("Invalid lockfile")
-                args = [
-                    str(executable),
-                    "scan",
-                    "source",
-                    "--offline",
-                    "--format=json",
-                    "--all-packages",
-                    "--no-resolve",
-                    "--no-call-analysis=go",
-                    "--no-call-analysis=rust",
-                    "--config=" + str(config),
-                ]
-                for file in selected:
-                    args.extend(["--lockfile", str(file)])
-                found, checked, skipped = parse_advisories(
-                    execute_json(args, temporary, env), root
-                )
+                    result["failedLockfiles"].append(file.relative_to(root).as_posix())
+                    continue
+                result["checkedLockfileCount"] += 1
                 result["findings"].extend(found)
                 result["packageCount"] += checked
                 result["skippedLocalPackages"] += skipped
         result["updates"] = update_plans(root, result["findings"])
         result["status"] = "success" if result["packageCount"] else "skipped"
-        if not result["packageCount"]:
+        if result["failedLockfiles"]:
+            result["status"] = "failed"
+            result["reason"] = (
+                "Sebagian lockfile gagal diaudit; hasil lockfile lainnya dipertahankan. Lihat failedLockfiles."
+            )
+        elif not result["packageCount"]:
             result["reason"] = (
                 "Tidak ada paket yang dapat diaudit; entri lokal/tanpa resolved dapat dilewati OSV."
             )
@@ -941,12 +961,19 @@ def render(report):
     rows = report["findings"] + report["sourceEngines"][1]["findings"]
     print_table(
         ["Engine", "Lokasi", "Rule"],
-        [[f["engine"], f"{f['file']}:{f['line']}", f["ruleId"]] for f in rows[:20]],
+        [
+            [f["engine"], f"{f['file']}:{f['line'] or '?'}", f["ruleId"]]
+            for f in rows[:20]
+        ],
         [14, 42, 32],
     )
     if len(rows) > 20:
         print(f"{len(rows) - 20} temuan lain tersedia lewat --output.")
     audit = report["dependencyAudit"]
+    if audit.get("failedLockfiles"):
+        print("LOCKFILE GAGAL DIAUDIT")
+        for file in audit["failedLockfiles"]:
+            print("  " + safe(file))
     print("PEMBARUAN DEPENDENCY")
     print_table(
         ["Paket terpasang", "Advisory", "Kandidat fix"],

@@ -126,7 +126,7 @@ class NativeScannerTests(unittest.TestCase):
             return [
                 {
                     "File": str(self.root / "app.js"),
-                    "StartLine": 1,
+                    "StartLine": 0,
                     "RuleID": "generic-api-key",
                     "Secret": "PRIVATE_VALUE",
                     "Match": "PRIVATE_SOURCE",
@@ -142,6 +142,7 @@ class NativeScannerTests(unittest.TestCase):
         ):
             result = scanner.gitleaks(self.root, self.root, [excluded])
         self.assertEqual(result["status"], "success")
+        self.assertIsNone(result["findings"][0]["line"])
         self.assertNotIn("PRIVATE", json.dumps(result))
 
     def test_advisory_parser_preserves_versions_and_rejects_outside_paths(self):
@@ -182,6 +183,21 @@ class NativeScannerTests(unittest.TestCase):
         raw["results"][0]["source"]["path"] = str(self.root.parent / "outside.json")
         with self.assertRaises(ValueError):
             scanner.parse_advisories(raw, self.root)
+
+    def test_real_unicode_folder_names_are_preserved_and_terminal_escaped(self):
+        file = self.write("folder\ufeffwith-marker/app.js", "const ok = true;")
+        self.assertEqual(
+            scanner.relative_file(self.root, str(file)),
+            "folder\ufeffwith-marker/app.js",
+        )
+        self.assertNotIn(
+            "\ufeff", scanner.safe(scanner.relative_file(self.root, str(file)))
+        )
+        self.assertIn(
+            "\\ufeff", scanner.safe(scanner.relative_file(self.root, str(file)))
+        )
+        with self.assertRaises(ValueError):
+            scanner.relative_file(self.root, "bad\x00path")
 
     def test_update_guidance_distinguishes_nested_versions_and_unknown_package_managers(
         self,
@@ -250,6 +266,44 @@ class NativeScannerTests(unittest.TestCase):
         ):
             with self.assertRaises(subprocess.TimeoutExpired):
                 scanner.execute_json(["engine"], self.root)
+
+    def test_invalid_lockfile_keeps_other_audit_results_and_reports_partial_failure(
+        self,
+    ):
+        key, _, _, executable = scanner.engine_paths(self.root)
+        executable.parent.mkdir(parents=True)
+        executable.write_bytes(b"fixture engine")
+        hashes = dict(scanner.OSV_HASHES)
+        hashes[key] = hashlib.sha256(b"fixture engine").hexdigest()
+        bad = self.write("bad/pnpm-lock.yaml", "invalid lockfile")
+        good = self.write("good/package-lock.json", "{}")
+        raw = {
+            "results": [
+                {
+                    "source": {"path": str(good)},
+                    "packages": [
+                        {
+                            "package": {
+                                "name": "demo",
+                                "ecosystem": "npm",
+                                "version": "1.0.0",
+                            },
+                            "vulnerabilities": [],
+                        }
+                    ],
+                }
+            ]
+        }
+        with patch.object(scanner, "OSV_HASHES", hashes), patch.object(
+            scanner, "database", return_value=(self.root, "fixture snapshot")
+        ), patch.object(
+            scanner, "execute_json", side_effect=[ValueError("fixture rejected"), raw]
+        ):
+            result = scanner.audit_dependencies(self.root, [bad, good], self.root)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["failedLockfiles"], ["bad/pnpm-lock.yaml"])
+        self.assertEqual(result["checkedLockfileCount"], 1)
+        self.assertEqual(result["packageCount"], 1)
 
     def test_command_entrypoint_rejects_invalid_mode_and_existing_report(self):
         script = Path(scanner.__file__).resolve()
