@@ -102,10 +102,15 @@ class NativeScannerTests(unittest.TestCase):
             scanner, "download", side_effect=download
         ), contextlib.redirect_stdout(
             io.StringIO()
-        ), contextlib.redirect_stderr(
+        ) as terminal, contextlib.redirect_stderr(
             io.StringIO()
         ):
-            scanner.prepare(self.root)
+            code = scanner.main(["prepare", "--cache-dir", str(self.root), "--json"])
+        self.assertEqual(code, 0)
+        prepared = json.loads(terminal.getvalue())
+        self.assertEqual(prepared["command"], "prepare")
+        self.assertEqual(prepared["networkMode"], "public-downloads-only")
+        self.assertTrue(prepared["ready"])
         manifest = json.loads((self.root / "offline/database.json").read_text())
         self.assertIsNotNone(re.fullmatch(r"db-[A-Za-z0-9]+", manifest["directory"]))
         folder, snapshot = scanner.database(self.root)
@@ -362,6 +367,183 @@ class NativeScannerTests(unittest.TestCase):
             code = scanner.main([str(self.root), "--output", str(output)])
         self.assertEqual(code, 2)
         self.assertEqual(output.read_text(), "original")
+
+    def test_help_and_invalid_commands_never_start_scan_or_prepare(self):
+        with patch.object(scanner, "scan") as scan, patch.object(
+            scanner, "prepare"
+        ) as prepare:
+            with contextlib.redirect_stdout(io.StringIO()) as terminal:
+                self.assertEqual(scanner.main([]), 0)
+            self.assertIn("doctor", terminal.getvalue())
+            for arguments in (
+                ["scan"],
+                ["scan", str(self.root), "--prepare"],
+                ["prepare", "--offline"],
+                ["prepare", str(self.root)],
+                ["doctor", str(self.root)],
+                ["--prepare", "--skip-worktrees"],
+            ):
+                with self.subTest(arguments=arguments), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    with self.assertRaises(SystemExit) as error:
+                        scanner.main(arguments)
+                    self.assertEqual(error.exception.code, 2)
+            scan.assert_not_called()
+            prepare.assert_not_called()
+
+    def test_json_cli_from_another_directory_preserves_legacy_scan_and_redaction(self):
+        self.write("app.js", 'eval("PRIVATE_TEST_ONLY");\n')
+        script = Path(scanner.__file__).resolve()
+        reports = []
+        for prefix in ([str(self.root)], ["scan", str(self.root)]):
+            output = self.root / (f"report-{len(reports)}.json")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    *prefix,
+                    "--offline",
+                    "--skip-worktrees",
+                    "--json",
+                    "--cache-dir",
+                    str(self.root / "absent-cache"),
+                    "--output",
+                    str(output),
+                ],
+                cwd=self.root,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertNotIn("PRIVATE_TEST_ONLY", result.stdout + result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(report, json.loads(output.read_text()))
+            self.assertIn("[1/4]", result.stderr)
+            self.assertIn("[4/4]", result.stderr)
+            self.assertEqual(
+                report["findings"][0]["ruleId"],
+                "sentinel.quick.node-dynamic-evaluation",
+            )
+            self.assertEqual(report["sourceEngines"][1]["status"], "failed")
+            self.assertGreaterEqual(report.pop("durationSeconds"), 0)
+            reports.append(report)
+        self.assertEqual(reports[0], reports[1])
+        self.assertFalse((self.root / "absent-cache").exists())
+
+    def test_doctor_verifies_cache_and_detects_each_corruption_without_execution(self):
+        key, archive, _, executable = scanner.engine_paths(self.root)
+        for file in (archive, executable):
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(b"fixture engine")
+        checksum = hashlib.sha256(b"fixture engine").hexdigest()
+        hashes = dict(scanner.OSV_HASHES, **{key: checksum})
+        assets = dict(
+            scanner.GITLEAKS_ASSETS,
+            **{key: (scanner.GITLEAKS_ASSETS[key][0], checksum)},
+        )
+        database_files = []
+        for ecosystem in ("npm", "Packagist"):
+            database_files.append(
+                self.write(
+                    f"offline/db-fixture/osv-scalibr/{ecosystem}/all.zip",
+                    "fixture database",
+                )
+            )
+        self.write(
+            "offline/database.json",
+            json.dumps(
+                {
+                    "directory": "db-fixture",
+                    "preparedAt": "2026-11-12T00:00:00+00:00",
+                    "databases": [
+                        {"ecosystem": ecosystem, "sha256": scanner.digest(file)}
+                        for ecosystem, file in zip(("npm", "Packagist"), database_files)
+                    ],
+                }
+            ),
+        )
+        with patch.object(scanner, "OSV_HASHES", hashes), patch.object(
+            scanner, "GITLEAKS_ASSETS", assets
+        ), patch.object(
+            scanner.urllib.request,
+            "urlopen",
+            side_effect=AssertionError("Network forbidden"),
+        ), patch.object(
+            scanner.subprocess, "run", side_effect=AssertionError("Execution forbidden")
+        ):
+            with contextlib.redirect_stdout(io.StringIO()) as terminal:
+                self.assertEqual(
+                    scanner.main(["doctor", "--cache-dir", str(self.root), "--json"]), 0
+                )
+            self.assertTrue(json.loads(terminal.getvalue())["ready"])
+            for index, file in enumerate((archive, executable, database_files[0])):
+                original = file.read_bytes()
+                file.write_bytes(b"corrupt")
+                with self.subTest(component=index), contextlib.redirect_stdout(
+                    io.StringIO()
+                ) as terminal:
+                    self.assertEqual(
+                        scanner.main(
+                            ["doctor", "--cache-dir", str(self.root), "--json"]
+                        ),
+                        2,
+                    )
+                    result = json.loads(terminal.getvalue())
+                    self.assertFalse(result["ready"])
+                    self.assertEqual(result["checks"][index]["status"], "failed")
+                file.write_bytes(original)
+
+    def test_doctor_missing_cache_and_scan_error_return_safe_json(self):
+        script = Path(scanner.__file__).resolve()
+        cache = self.root / "cache-does-not-exist"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "doctor",
+                "--cache-dir",
+                str(cache),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(
+            [c["status"] for c in json.loads(result.stdout)["checks"]], ["failed"] * 3
+        )
+        self.assertFalse(cache.exists())
+        with contextlib.redirect_stdout(io.StringIO()) as terminal:
+            code = scanner.main(
+                ["scan", str(self.root / "PRIVATE_PATH_MISSING"), "--json"]
+            )
+        self.assertEqual(code, 2)
+        self.assertEqual(
+            json.loads(terminal.getvalue())["error"]["code"], "COMMAND_FAILED"
+        )
+        self.assertNotIn("PRIVATE_PATH_MISSING", terminal.getvalue())
+
+    def test_empty_advisory_output_distinguishes_success_from_failed_audit(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            report = scanner.scan(self.root, self.root / "empty-cache")
+        for status in ("success", "failed", "skipped"):
+            report["dependencyAudit"]["status"] = status
+            with self.subTest(status=status), contextlib.redirect_stdout(
+                io.StringIO()
+            ) as terminal:
+                scanner.render(report)
+            output = terminal.getvalue()
+            self.assertEqual(
+                "Tidak ada advisory yang cocok" in output, status == "success"
+            )
+            self.assertEqual(
+                "Audit dependency belum lengkap" in output, status != "success"
+            )
+            self.assertNotIn("LANGKAH UPDATE MANUAL", output)
+            self.assertNotIn("+---", output)
 
 
 if __name__ == "__main__":

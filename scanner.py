@@ -4,6 +4,7 @@
 import argparse
 import base64
 from collections import defaultdict
+import contextlib
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unicodedata
 import urllib.request
 import zipfile
@@ -275,6 +277,55 @@ def database(cache):
         if not regular(file) or digest(file) != entry["sha256"]:
             raise ValueError("Invalid database checksum")
     return folder, manifest["preparedAt"]
+
+
+def doctor(cache):
+    key, archive, checksum, executable = engine_paths(cache)
+    checks = []
+    for name, version, file, expected in (
+        ("Gitleaks", GITLEAKS_VERSION, archive, checksum),
+        ("OSV-Scanner", OSV_VERSION, executable, OSV_HASHES[key]),
+    ):
+        try:
+            valid = regular(file) and digest(file) == expected
+        except OSError:
+            valid = False
+        checks.append(
+            {
+                "component": name,
+                "version": version,
+                "status": "verified" if valid else "failed",
+                "reason": (
+                    "Checksum cocok."
+                    if valid
+                    else "Cache hilang atau checksum tidak cocok."
+                ),
+            }
+        )
+    snapshot = None
+    try:
+        _, snapshot = database(cache)
+        status, reason = "verified", "Checksum npm dan Packagist cocok."
+    except (OSError, ValueError, KeyError, TypeError, StopIteration):
+        status, reason = "failed", "Database hilang atau tidak lolos validasi."
+    checks.append(
+        {
+            "component": "Database advisory",
+            "version": None,
+            "status": status,
+            "reason": reason,
+        }
+    )
+    return {
+        "schemaVersion": 1,
+        "command": "doctor",
+        "platform": key,
+        "networkMode": "offline",
+        "ready": all(check["status"] == "verified" for check in checks),
+        "checks": checks,
+        "databasePreparedAt": snapshot,
+        "notice": "Pemeriksaan cache saja; runtime engine belum diuji. Semgrep tidak dijalankan pada jalur Python.",
+    }
 
 
 def inventory(root, skip_worktrees):
@@ -869,11 +920,16 @@ def audit_dependencies(root, lockfiles, cache):
 
 
 def scan(root, cache, skip_worktrees=False):
+    started = time.perf_counter()
+    print("[1/4] Mendata source dan lockfile...", file=sys.stderr)
     source, lockfiles, excluded, skipped_links = inventory(root, skip_worktrees)
+    print(f"[2/4] Memeriksa pola pada {len(source)} file source...", file=sys.stderr)
     findings, skipped_large = scan_patterns(root, source)
-    print("Menjalankan Gitleaks native...", file=sys.stderr)
+    print("[3/4] Menjalankan Gitleaks native...", file=sys.stderr)
     secrets = gitleaks(root, cache, excluded)
-    print("Menjalankan OSV offline...", file=sys.stderr)
+    print(
+        f"[4/4] Menjalankan OSV offline ({len(lockfiles)} lockfile)...", file=sys.stderr
+    )
     audit = audit_dependencies(root, lockfiles, cache)
     ruleset_digest = hashlib.sha256(
         json.dumps([(rule, pattern.pattern) for _, rule, pattern, _ in RULES]).encode()
@@ -883,6 +939,7 @@ def scan(root, cache, skip_worktrees=False):
         "mode": "local-native-offline",
         "networkMode": "offline",
         "coverage": "limited",
+        "durationSeconds": round(time.perf_counter() - started, 3),
         "scannedFiles": len(source) - skipped_large,
         "skippedLargeFiles": skipped_large,
         "skippedLinks": skipped_links,
@@ -923,7 +980,10 @@ def exit_code(report):
     )
 
 
-def print_table(headers, rows, widths):
+def print_table(headers, rows, widths, empty_message="Tidak ada entri."):
+    if not rows:
+        print(empty_message)
+        return
     border = "+" + "+".join("-" * (width + 2) for width in widths) + "+"
     print(border)
     for row in [headers] + rows:
@@ -955,9 +1015,10 @@ def render(report):
         )
         if engine.get("reason"):
             print("    " + safe(engine["reason"]))
-    print("WORKTREE DILEWATI")
-    for directory in report["skippedWorktrees"]:
-        print("  " + safe(directory))
+    if report["skippedWorktrees"]:
+        print("WORKTREE DILEWATI")
+        for directory in report["skippedWorktrees"]:
+            print("  " + safe(directory))
     print("TEMUAN SOURCE DAN SECRET (perlu review)")
     rows = report["findings"] + report["sourceEngines"][1]["findings"]
     print_table(
@@ -967,6 +1028,7 @@ def render(report):
             for f in rows[:20]
         ],
         [14, 42, 32],
+        "Tidak ada temuan source/secret yang dilaporkan. Periksa cakupan engine di atas.",
     )
     if len(rows) > 20:
         print(f"{len(rows) - 20} temuan lain tersedia lewat --output.")
@@ -987,10 +1049,16 @@ def render(report):
             for f in audit["findings"][:20]
         ],
         [32, 24, 32],
+        (
+            "Tidak ada advisory yang cocok pada snapshot ini."
+            if audit["status"] == "success"
+            else "Audit dependency belum lengkap; periksa status engine di atas."
+        ),
     )
     if audit.get("databasePreparedAt"):
         print("Snapshot database: " + safe(audit["databasePreparedAt"]))
-    print("LANGKAH UPDATE MANUAL (dari folder lockfile)")
+    if audit["updates"]:
+        print("LANGKAH UPDATE MANUAL (dari folder lockfile)")
     for plan in audit["updates"][:10]:
         print(
             f"  {safe(plan['package'])}@{safe(plan['version'])} [{plan['kind']}] ({safe(plan['file'])})"
@@ -1018,6 +1086,7 @@ def render(report):
     print(
         f"{report['scannedFiles']} file source; {len(report['findings'])} pola; {len(report['sourceEngines'][1]['findings'])} indikasi secret; {audit['lockfileCount']} lockfile; {audit['packageCount']} paket; {len(audit['findings'])} advisory."
     )
+    print(f"Durasi: {report['durationSeconds']:.1f} detik.")
     print(
         "Status: "
         + (
@@ -1031,42 +1100,85 @@ def render(report):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description="Sentinel native offline scanner. Python 3.10+, tanpa Node.js atau WSL."
+        description="Sentinel native offline scanner. Python 3.10+, tanpa Node.js atau WSL.",
+        epilog="Format lama tetap didukung: scanner.py <folder> [opsi] atau scanner.py --prepare.",
     )
-    parser.add_argument("target", nargs="?", help="Folder repository lokal")
-    parser.add_argument(
-        "--prepare",
-        action="store_true",
-        help="Unduh engine dan database publik; tanpa target repository",
-    )
-    parser.add_argument(
+    commands = parser.add_subparsers(dest="command", title="perintah")
+    scan_parser = commands.add_parser("scan", help="Scan repository dari cache offline")
+    scan_parser.add_argument("target", help="Folder repository lokal")
+    scan_parser.add_argument(
         "--offline", action="store_true", help="Cache lokal saja (default saat scan)"
     )
-    parser.add_argument(
+    scan_parser.add_argument(
         "--skip-worktrees",
         action="store_true",
         help="Lewati linked Git worktree di dalam target",
     )
-    parser.add_argument("--output", type=Path, help="Report JSON baru, tersanitasi")
-    parser.add_argument(
-        "--cache-dir",
-        type=Path,
-        default=Path(__file__).resolve().parent / ".sentinel-cache",
+    scan_parser.add_argument(
+        "--output", type=Path, help="Report JSON baru, tersanitasi"
     )
-    args = parser.parse_args(argv)
-    if args.prepare and (
-        args.target or args.offline or args.output or args.skip_worktrees
-    ):
-        parser.error(
-            "--prepare berdiri sendiri; jalankan scan offline setelah cache siap."
+    prepare_parser = commands.add_parser(
+        "prepare", help="Unduh engine/database publik; perlu internet"
+    )
+    doctor_parser = commands.add_parser(
+        "doctor", help="Periksa checksum cache tanpa jaringan atau scan"
+    )
+    for command_parser in (scan_parser, prepare_parser, doctor_parser):
+        command_parser.add_argument(
+            "--json",
+            action="store_true",
+            help="JSON tersanitasi ke stdout; progress ke stderr",
         )
-    if not args.prepare and not args.target:
-        parser.error("Masukkan folder target, atau gunakan --prepare.")
+        command_parser.add_argument(
+            "--cache-dir",
+            type=Path,
+            default=Path(__file__).resolve().parent / ".sentinel-cache",
+        )
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if not arguments:
+        parser.print_help()
+        return 0
+    if arguments[0] not in ("scan", "prepare", "doctor", "-h", "--help"):
+        if "--prepare" in arguments:
+            arguments.remove("--prepare")
+            arguments.insert(0, "prepare")
+        else:
+            arguments.insert(0, "scan")
+    args = parser.parse_args(arguments)
     try:
         cache = args.cache_dir.resolve()
-        if args.prepare:
-            prepare(cache)
-            return 0
+        if args.command in ("prepare", "doctor"):
+            if args.command == "prepare":
+                with contextlib.redirect_stdout(sys.stderr):
+                    prepare(cache)
+            result = doctor(cache)
+            result["command"] = args.command
+            if args.command == "prepare":
+                result["networkMode"] = "public-downloads-only"
+            if args.json:
+                print(json.dumps(result, ensure_ascii=True))
+            else:
+                print("KESIAPAN CACHE OFFLINE")
+                print_table(
+                    ["Komponen", "Versi", "Status"],
+                    [
+                        [
+                            check["component"],
+                            check["version"] or "snapshot",
+                            check["status"].upper(),
+                        ]
+                        for check in result["checks"]
+                    ],
+                    [24, 12, 12],
+                )
+                for check in result["checks"]:
+                    print(f"  {check['component']}: {check['reason']}")
+                if result["databasePreparedAt"]:
+                    print("Snapshot database: " + safe(result["databasePreparedAt"]))
+                if not result["ready"]:
+                    print("Jalankan py -3 scanner.py prepare saat internet tersedia.")
+                print(result["notice"])
+            return 0 if result["ready"] else 2
         target = Path(args.target)
         if (
             target.is_symlink()
@@ -1081,13 +1193,17 @@ def main(argv=None):
             with args.output.open("x", encoding="utf-8") as output:
                 json.dump(report, output, ensure_ascii=True, indent=2)
                 output.write("\n")
-        render(report)
+        if args.json:
+            print(json.dumps(report, ensure_ascii=True))
+        else:
+            render(report)
         return exit_code(report)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
-        print(
-            "Sentinel gagal. Periksa target, izin, batas inventory, dan path report. Tidak ada kesimpulan aman.",
-            file=sys.stderr,
-        )
+        message = "Sentinel gagal. Periksa target, izin, batas inventory, dan path report. Tidak ada kesimpulan aman."
+        if args.json:
+            print(json.dumps({"error": {"code": "COMMAND_FAILED", "message": message}}))
+        else:
+            print(message, file=sys.stderr)
         return 2
 
 

@@ -9,24 +9,49 @@ Clone Sentinel, lalu masuk ke foldernya.
 ```powershell
 git clone https://github.com/abbyhilman/sentinel-security-scanner.git
 Set-Location .\sentinel-security-scanner
-py -3 scanner.py --prepare
+py -3 scanner.py prepare
 ```
 
-`--prepare` mengunduh executable Gitleaks 8.30.1, OSV-Scanner 2.7.0, dan snapshot database advisory publik npm/Packagist. Perintah ini tidak menerima folder target. Checksum executable dan arsip engine dikunci di `scanner.py`. Database diverifikasi terhadap metadata unduhan, lalu checksum lokalnya dicatat. Persiapan memerlukan internet dan beberapa ratus MB ruang cache. Jalankan kembali ketika perlu memperbarui snapshot.
+`prepare` mengunduh executable Gitleaks 8.30.1, OSV-Scanner 2.7.0, dan snapshot database advisory publik npm/Packagist. Perintah ini tidak menerima folder target. Checksum executable dan arsip engine dikunci di `scanner.py`. Database diverifikasi terhadap metadata unduhan, lalu checksum lokalnya dicatat. Persiapan memerlukan internet dan beberapa ratus MB ruang cache. Jalankan kembali ketika perlu memperbarui snapshot.
+
+Untuk memeriksa cache tanpa jaringan dan tanpa memindai repository:
+
+```powershell
+py -3 scanner.py doctor
+```
+
+`doctor` memverifikasi checksum engine dan database. Status `VERIFIED` berarti cache cocok dengan checksum, bukan bukti bahwa runtime engine atau kode target aman. Jika cache belum siap, jalankan `prepare` saat online. Command ini tidak mengunduh atau memperbaiki cache secara otomatis.
 
 Setelah cache siap, satu command menjalankan scan lokal. Ganti path contoh dengan folder repository Anda.
 
 ```powershell
-py -3 scanner.py 'D:\Projects\aplikasi-saya' --offline --skip-worktrees
+py -3 scanner.py scan 'D:\Projects\aplikasi-saya' --offline --skip-worktrees
 ```
 
 Untuk menyimpan seluruh temuan tersanitasi dan panduan update ke JSON, tambahkan nama laporan baru.
 
 ```powershell
-py -3 scanner.py 'D:\Projects\aplikasi-saya' --offline --skip-worktrees --output report-native.json
+py -3 scanner.py scan 'D:\Projects\aplikasi-saya' --offline --skip-worktrees --output report-native.json
 ```
 
+Jika sedang berada di folder lain, tulis path lengkap scanner. Contoh berikut memakai lokasi clone contoh; sesuaikan dengan lokasi Anda:
+
+```powershell
+py -3 'C:\Tools\sentinel-security-scanner\scanner.py' scan 'D:\Projects\aplikasi-saya' --offline --skip-worktrees
+```
+
+Bantuan tersedia melalui `py -3 scanner.py --help` atau `py -3 scanner.py scan --help`. Tanpa argumen, scanner menampilkan bantuan. Format lama `py -3 scanner.py <folder> ...` dan `py -3 scanner.py --prepare` tetap berlaku. Untuk folder bernama `scan`, `prepare`, atau `doctor`, gunakan path lengkap atau awali dengan `.\`.
+
 `python scanner.py ...` juga bisa dipakai jika perintah `python` di terminal sudah mengarah ke instalasi Python. Scan selalu memakai cache lokal, termasuk ketika `--offline` tidak ditulis. Cache yang hilang atau rusak menghasilkan status engine gagal dan exit code `2`. Command persiapan terpisah mencegah scan offline melakukan unduhan otomatis.
+
+Ketiga command mendukung `--json` untuk stdout yang dapat dibaca program. Progress ditulis ke stderr, sehingga tidak mencampuri JSON. Contoh membaca ringkasan di PowerShell:
+
+```powershell
+$report = py -3 scanner.py scan 'D:\Projects\aplikasi-saya' --offline --skip-worktrees --json | ConvertFrom-Json
+$report.dependencyAudit.updates
+```
+
+Scan menampilkan empat tahap dan durasi. Ketika audit berhasil tanpa kecocokan advisory, terminal menampilkan pesan eksplisit, tanpa tabel atau judul langkah update kosong. Jika audit gagal atau dilewati, terminal menyatakan cakupan belum lengkap. Kesalahan saat menjalankan command memakai `error.code` pada mode JSON; kesalahan sintaks command tetap ditampilkan oleh parser di stderr.
 
 Audit dilakukan per lockfile. Jika salah satu file tidak dapat dibaca OSV, hasil dari file lain tetap dipertahankan, status audit menjadi `FAILED`, dan daftar file tercatat di `failedLockfiles`. Nama file Unicode di-escape saat ditampilkan. Temuan tanpa nomor baris memakai `line: null` pada JSON dan `?` di terminal.
 

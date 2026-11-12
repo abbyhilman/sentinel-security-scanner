@@ -211,6 +211,14 @@ Pemilihan file Semgrep memakai inventory source yang sudah dibatasi. Gitleaks me
 
 Persiapan online dilakukan eksplisit melalui `--prepare` tanpa target. Scan memakai cache secara default dan tidak memanggil persiapan otomatis. Paket target tidak diinstal dan skrip repository tidak dieksekusi. Engine dan checksum mengikuti artifact resmi yang sudah dipakai CLI Node. Panduan pemakaian serta batas cakupan berada di README; bukti awal Windows dicatat pada timeline CLI lokal.
 
+## D-025 — subcommand CLI Python dengan kompatibilitas pemanggilan lama
+
+**Status:** implementasi berdasarkan permintaan pengguna, 12 November 2026.
+
+Antarmuka Python menyediakan `scan`, `prepare`, dan `doctor`, dengan `--json` pada ketiganya. Bentuk lama folder langsung dan `--prepare` tetap diterima. JSON scan mempertahankan schemaVersion 1 dengan tambahan `durationSeconds`; progress berada di stderr. `doctor` hanya memverifikasi checksum cache dan tidak menjalankan engine atau mengakses jaringan. Cache yang belum valid menghasilkan exit code 2.
+
+Metodologi CLI-Anything dipakai untuk inventori kemampuan, kontrak JSON, pengujian subprocess, dan backend nyata. Struktur namespace/Click/REPL tidak diterapkan pada jalur ini karena pengguna secara eksplisit memilih satu file Python tanpa pemasangan dependency. Scanner yang sudah ada tetap menjadi pemilik perilaku engine; tidak dibuat engine pengganti atau klaim bahwa pola native setara Semgrep. Rencana serta hasil uji dicatat di `tests/TEST.md`.
+
 ## Keputusan yang masih terbuka
 
 1. Kebijakan private repository dan perpindahan kepemilikan.
