@@ -14,6 +14,8 @@ Pengujian folder induk pasca-push menemukan nama direktori yang mengandung karak
 
 Fixture pnpm sintetis milik Sentinel ditolak OSV. Audit native kini memproses lockfile secara terpisah, mempertahankan hasil yang valid, dan melaporkan `failedLockfiles` serta status gagal jika sebagian file tidak dapat diaudit. Kegagalan satu lockfile tidak menghasilkan kesimpulan aman untuk file itu dan tidak membuang bukti dari lockfile lain.
 
+Nama snapshot hasil persiapan Python mengikuti bentuk alfanumerik yang diterima pemeriksa cache CLI Node. Pengujian persiapan terkontrol memverifikasi publikasi manifest dan pemakaian ulang kedua database tanpa dependensi Python tambahan.
+
 CI menjalankan tes Python melalui `python3 -m unittest discover -s tests -p test_native_scanner.py -v`. Hasil Quality dan pengujian pasca-push dicatat pada laporan tugas serta report lokal tersanitasi. Binary Linux/macOS tersedia pada pemetaan cache, tetapi uji langsung jalur Python saat implementasi dilakukan di Windows x64.
 
 Batas yang tetap berlaku meliputi pola source yang terbatas, false positive, snapshot advisory yang bertanggal, penelusuran workspace pnpm/Yarn yang membutuhkan verifikasi manual, dan riwayat Git yang belum diperiksa. Pemeliharaan versi engine harus memperbarui versi serta checksum bersamaan dan mengulang tes redaksi serta audit offline.

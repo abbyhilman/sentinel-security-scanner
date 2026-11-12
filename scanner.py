@@ -248,7 +248,8 @@ def prepare(cache):
                     "size": target.stat().st_size,
                 }
             )
-        snapshot = Path(tempfile.mkdtemp(prefix="db-", dir=offline))
+        snapshot = offline / ("db-" + os.urandom(8).hex())
+        snapshot.mkdir()
         for ecosystem in ("npm", "Packagist"):
             source = directory / "osv-scalibr" / ecosystem / "all.zip"
             destination = snapshot / "osv-scalibr" / ecosystem / "all.zip"

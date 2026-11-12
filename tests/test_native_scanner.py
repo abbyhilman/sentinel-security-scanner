@@ -1,7 +1,9 @@
 import contextlib
+import base64
 import hashlib
 import io
 import json
+import re
 import os
 from pathlib import Path
 import subprocess
@@ -66,6 +68,49 @@ class NativeScannerTests(unittest.TestCase):
         self.assertEqual(report["sourceEngines"][1]["status"], "failed")
         self.assertEqual(report["sourceEngines"][2]["status"], "not_requested")
         self.assertEqual((self.root / "app.js").read_bytes(), before)
+
+    def test_preparation_keeps_snapshot_compatible_with_existing_node_cache(self):
+        key, archive, _, executable = scanner.engine_paths(self.root)
+        for file in (archive, executable):
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_bytes(b"fixture engine")
+        checksum = hashlib.sha256(b"fixture engine").hexdigest()
+        hashes = dict(scanner.OSV_HASHES)
+        hashes[key] = checksum
+        assets = dict(scanner.GITLEAKS_ASSETS)
+        assets[key] = (assets[key][0], checksum)
+        payload = b"fixture database"
+        metadata = json.dumps(
+            {
+                "generation": "123",
+                "size": len(payload),
+                "md5Hash": base64.b64encode(hashlib.md5(payload).digest()).decode(),
+            }
+        ).encode()
+
+        def download(url, destination, expected=None, max_bytes=1024 * 1024 * 1024):
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(payload)
+
+        with patch.object(scanner, "OSV_HASHES", hashes), patch.object(
+            scanner, "GITLEAKS_ASSETS", assets
+        ), patch.object(
+            scanner.urllib.request,
+            "urlopen",
+            side_effect=lambda *a, **kw: io.BytesIO(metadata),
+        ), patch.object(
+            scanner, "download", side_effect=download
+        ), contextlib.redirect_stdout(
+            io.StringIO()
+        ), contextlib.redirect_stderr(
+            io.StringIO()
+        ):
+            scanner.prepare(self.root)
+        manifest = json.loads((self.root / "offline/database.json").read_text())
+        self.assertIsNotNone(re.fullmatch(r"db-[A-Za-z0-9]+", manifest["directory"]))
+        folder, snapshot = scanner.database(self.root)
+        self.assertTrue((folder / "osv-scalibr/npm/all.zip").is_file())
+        self.assertEqual(snapshot, manifest["preparedAt"])
 
     def test_worktree_scope_keeps_sibling_and_submodule_and_explicit_target(self):
         self.write("app.js", "const ok = true;\n")
