@@ -1,6 +1,42 @@
 # Sentinel Security Scanner
 
-Sentinel memeriksa folder kode PHP, JavaScript, atau TypeScript dari terminal. CLI menyediakan **pemeriksaan pola cepat**, **mode multi-engine offline**, serta **audit OSV online opsional**. Tidak perlu menyiapkan GitHub Actions, Supabase, atau Docker. Mode cepat cukup memakai Node.js; mode offline memerlukan cache engine/database dan runtime yang dapat menjalankan engine tersebut.
+Sentinel memeriksa folder kode PHP, JavaScript, atau TypeScript dari terminal. Jalur Python native menyediakan pemeriksaan pola source, Gitleaks, audit dependency OSV offline, dan panduan update. Gunakan Python 3.10 atau lebih baru untuk menjalankannya langsung di PowerShell. Tidak perlu Node.js, WSL, Docker, GitHub Actions, atau Supabase untuk jalur ini.
+
+## Python native di PowerShell
+
+Clone Sentinel, lalu masuk ke foldernya.
+
+```powershell
+git clone https://github.com/abbyhilman/sentinel-security-scanner.git
+Set-Location .\sentinel-security-scanner
+py -3 scanner.py --prepare
+```
+
+`--prepare` mengunduh executable Gitleaks 8.30.1, OSV-Scanner 2.7.0, dan snapshot database advisory publik npm/Packagist. Perintah ini tidak menerima folder target. Checksum executable dan arsip engine dikunci di `scanner.py`. Database diverifikasi terhadap metadata unduhan, lalu checksum lokalnya dicatat. Persiapan memerlukan internet dan beberapa ratus MB ruang cache. Jalankan kembali ketika perlu memperbarui snapshot.
+
+Setelah cache siap, satu command menjalankan scan lokal. Ganti path contoh dengan folder repository Anda.
+
+```powershell
+py -3 scanner.py 'D:\Projects\aplikasi-saya' --offline --skip-worktrees
+```
+
+Untuk menyimpan seluruh temuan tersanitasi dan panduan update ke JSON, tambahkan nama laporan baru.
+
+```powershell
+py -3 scanner.py 'D:\Projects\aplikasi-saya' --offline --skip-worktrees --output report-native.json
+```
+
+`python scanner.py ...` juga bisa dipakai jika perintah `python` di terminal sudah mengarah ke instalasi Python. Scan selalu memakai cache lokal, termasuk ketika `--offline` tidak ditulis. Cache yang hilang atau rusak menghasilkan status engine gagal dan exit code `2`. Command persiapan terpisah mencegah scan offline melakukan unduhan otomatis.
+
+Tabel menampilkan lokasi temuan, kandidat versi perbaikan, induk dependency jika dapat ditentukan dari lockfile, dan langkah update manual. File target dan dependency proyek tidak diubah. Nilai secret dan raw source tidak disertakan pada JSON atau terminal. Exit code `0` berarti selesai tanpa temuan pada cakupannya, `1` berarti ada temuan untuk ditinjau, dan `2` berarti ada kegagalan. JSON mencatat `mode: local-native-offline` dan status setiap engine.
+
+Pemeriksaan source Python memakai empat pola bawaan yang terbatas. **Semgrep tidak dijalankan pada jalur Python**, dan hasilnya ditandai `NOT_REQUESTED`. Gitleaks tetap memeriksa working tree termasuk file lokal seperti `.env`, sementara riwayat Git belum diperiksa. Composer lockfile diaudit melalui OSV; Composer Audit terpisah belum dijalankan. Dukungan binary mengikuti Windows, Linux, dan macOS x64/ARM64; uji langsung dilakukan di Windows x64. Waktu snapshot ditampilkan karena advisory yang lebih baru belum tercakup.
+
+`scanner.py` memakai standard library Python dan dapat disalin sebagai pintu masuk mandiri. Folder `.sentinel-cache` dibuat di sebelahnya. Opsi `--cache-dir` dapat menunjuk cache lain, termasuk cache CLI Node yang sudah ada. Tidak ada `pip install` untuk scanner ini. Tes pengembang tersedia melalui `py -3 -m unittest discover -s tests -p test_native_scanner.py -v`.
+
+## Jalur Node.js yang sudah ada
+
+CLI Node tetap menyediakan pemeriksaan pola cepat, mode multi-engine offline, serta audit OSV online opsional. Mode cepat cukup memakai Node.js; mode offline dengan Semgrep memerlukan cache engine/database dan runtime yang dapat menjalankan engine tersebut.
 
 > **Scan offline di Windows:** Semgrep, Gitleaks, dan OSV berhasil diuji melalui WSL 2 dengan Ubuntu 24.04 x64. Pada Windows native, Semgrep gagal dengan `socketpair` di mesin uji. Ikuti panduan untuk mengaktifkan WSL dan menjalankan ketiga engine. [Panduan WSL](docs/WSL_OFFLINE_SETUP.md)
 

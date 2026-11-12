@@ -41,6 +41,9 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Test native Python scanner
+        run: python3 -m unittest discover -s tests -p test_native_scanner.py -v
+
       - name: Build
         run: pnpm build
 

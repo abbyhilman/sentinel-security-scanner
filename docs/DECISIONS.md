@@ -203,6 +203,14 @@ Pemilihan file Semgrep memakai inventory source yang sudah dibatasi. Gitleaks me
 
 **Bukti dan batas:** Gitleaks positive fixture + redaksi dan OSV advisory offline berhasil. Semgrep native 1.182.0, pembanding 1.183.0 dan 1.162.0 gagal pada `socketpair`. WSL Ubuntu terdaftar tetapi gagal dimulai karena fitur VM belum tersedia. Pengguna memilih panduan aktivasi WSL; fitur Windows tidak diaktifkan dan reboot tidak dijalankan oleh agent. Linux/macOS belum diuji. Mode offline menggunakan perilaku lokal tool dan tidak memakai isolasi jaringan level OS; packet capture/firewall egress belum diverifikasi. Status keseluruhan tetap sebagian gagal sampai Semgrep benar-benar memindai dengan sukses.
 
+## D-024 — pintu masuk Python native untuk Windows
+
+**Status:** implementasi atas permintaan pengguna, 12 November 2026.
+
+`scanner.py` menjadi jalur tambahan yang dapat dijalankan langsung di PowerShell dengan Python 3.10+, Gitleaks native, dan OSV offline dari cache. Source scanner memakai empat pola deterministik PHP/JS/TS. Semgrep diberi status `not_requested` pada jalur ini. Pemisahan identitas engine mempertahankan provenance dan mencegah hasil pola native dihitung sebagai analisis Semgrep. Jalur Node/WSL sebelumnya tetap tersedia.
+
+Persiapan online dilakukan eksplisit melalui `--prepare` tanpa target. Scan memakai cache secara default dan tidak memanggil persiapan otomatis. Paket target tidak diinstal dan skrip repository tidak dieksekusi. Engine dan checksum mengikuti artifact resmi yang sudah dipakai CLI Node. Panduan pemakaian serta batas cakupan berada di README; bukti awal Windows dicatat pada timeline CLI lokal.
+
 ## Keputusan yang masih terbuka
 
 1. Kebijakan private repository dan perpindahan kepemilikan.
