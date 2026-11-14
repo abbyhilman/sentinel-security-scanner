@@ -16,3 +16,16 @@ Thumbs.db
 
 __pycache__/
 *.pyc
+
+# Local planning documents and agent instructions
+/docs/
+/tests/TEST.md
+*.docx
+AGENTS.md
+CLAUDE.md
+CODEX.md
+GEMINI.md
+*_CODEX_*.md
+.agents/
+.codex/
+.claude/

@@ -4,6 +4,12 @@ Sentinel memeriksa folder kode PHP, JavaScript, atau TypeScript dari terminal. J
 
 ## Python native di PowerShell
 
+Diagram menunjukkan alur `prepare`, `doctor`, dan `scan`, termasuk langkah saat cache gagal diverifikasi serta laporan dari ketiga pemeriksaan.
+
+[![Flowchart Sentinel offline di Windows dari persiapan cache hingga laporan](assets/sentinel-offline-flow.svg)](assets/sentinel-offline-flow.svg?raw=true)
+
+Klik diagram atau [buka SVG ukuran penuh](assets/sentinel-offline-flow.svg?raw=true). Gunakan zoom browser (`Ctrl` + `+` atau `Ctrl` + `-`) atau gestur pinch pada perangkat sentuh.
+
 Clone Sentinel, lalu masuk ke foldernya.
 
 ```powershell
@@ -65,7 +71,7 @@ Pemeriksaan source Python memakai empat pola bawaan yang terbatas. **Semgrep tid
 
 CLI Node tetap menyediakan pemeriksaan pola cepat, mode multi-engine offline, serta audit OSV online opsional. Mode cepat cukup memakai Node.js; mode offline dengan Semgrep memerlukan cache engine/database dan runtime yang dapat menjalankan engine tersebut.
 
-> **Scan offline di Windows:** Semgrep, Gitleaks, dan OSV berhasil diuji melalui WSL 2 dengan Ubuntu 24.04 x64. Pada Windows native, Semgrep gagal dengan `socketpair` di mesin uji. Ikuti panduan untuk mengaktifkan WSL dan menjalankan ketiga engine. [Panduan WSL](docs/WSL_OFFLINE_SETUP.md)
+> **Scan offline di Windows:** Semgrep, Gitleaks, dan OSV berhasil diuji melalui WSL 2 dengan Ubuntu 24.04 x64. Pada Windows native, Semgrep gagal dengan `socketpair` di mesin uji. [Panduan instalasi WSL dari Microsoft](https://learn.microsoft.com/en-us/windows/wsl/install)
 
 ## 1. Siapkan Node.js dan clone Sentinel
 
@@ -138,7 +144,7 @@ Di PowerShell, lihat exit code perintah terakhir dengan `$LASTEXITCODE`. Bantuan
 
 ## Scan offline tanpa mengirim data repository
 
-Di Windows, ikuti panduan WSL untuk menyiapkan runtime Linux, cache engine, dan isolasi jaringan yang dipakai pada pengujian. Jika Node.js Linux, `tar`, dan `unzip` sudah tersedia, buka terminal Ubuntu dan masuk ke folder Sentinel. [Panduan WSL](docs/WSL_OFFLINE_SETUP.md)
+Untuk mode ini di Windows, buka Ubuntu di WSL 2. Pastikan Node.js Linux 22.12+, `tar`, dan `unzip` tersedia, lalu masuk ke folder clone Sentinel dari terminal Ubuntu.
 
 ```bash
 node sentinel.mjs prepare-offline
@@ -202,7 +208,7 @@ Tabel menampilkan maksimal 20 temuan source dan 20 advisory agar terminal tetap 
 
 Mode `local-quick` memeriksa pola eksekusi dinamis dan query SQL mentah pada PHP, serta evaluasi kode dan pemanggilan shell pada JavaScript/TypeScript. Folder `.git`, `.sentinel-cache`, `node_modules`, `vendor`, `dist`, `build`, `coverage`, `.next`, `.output`, dan symlink dilewati. File lebih dari 1 MiB dilewati; scan berhenti jika mencapai 10.000 file atau 1.000 temuan.
 
-Pola teks bisa cocok dengan komentar, string, atau contoh kode. Report menandai mode `local-quick` atau `local-offline` dengan `coverage: limited`; hasil OSV tercatat di `dependencyAudit`, Semgrep/Gitleaks di `sourceEngines`. Composer Audit terpisah belum dijalankan; advisory Composer lockfile dicakup OSV. Saran pencegahan berasal dari pemetaan aturan yang tetap, tanpa AI saat runtime. Rencana peningkatan ada di [rencana CLI lokal](docs/LOCAL_CLI_TASK_PLAN.md).
+Pola teks bisa cocok dengan komentar, string, atau contoh kode. Report menandai mode `local-quick` atau `local-offline` dengan `coverage: limited`; hasil OSV tercatat di `dependencyAudit`, Semgrep/Gitleaks di `sourceEngines`. Composer Audit terpisah belum dijalankan; advisory Composer lockfile dicakup OSV. Saran pencegahan berasal dari pemetaan aturan yang tetap, tanpa AI saat runtime.
 
 ## Jika perintah tidak berjalan
 
@@ -210,6 +216,6 @@ Pola teks bisa cocok dengan komentar, string, atau contoh kode. Report menandai 
 - **Folder target tidak ditemukan:** pastikan path setelah `scan` adalah folder yang ada; gunakan tanda kutip jika path mengandung spasi.
 - **File report sudah ada:** pakai nama baru setelah `--output`. Sentinel sengaja tidak menimpa hasil lama.
 - **Menemukan nol pola:** baca ringkasan cakupan. Untuk Gitleaks dan advisory tanpa query keluar gunakan `--offline` setelah `prepare-offline`.
-- **Semgrep gagal pada Windows:** hasil tetap sebagian gagal; ikuti [panduan WSL](docs/WSL_OFFLINE_SETUP.md), lalu verifikasi hasil scan pada Linux.
+- **Semgrep gagal pada Windows:** hasil tetap sebagian gagal. Jalankan mode Node offline dari Linux atau Ubuntu di WSL 2.
 
-Untuk pengembang yang ingin memeriksa CLI, jalankan `pnpm test:cli` (memerlukan dependensi pengembangan) atau `node --test tests/local-cli.test.mjs tests/local-report.test.mjs tests/offline.test.mjs`. Hasil pengujian terakhir ada di [ringkasan pengujian](docs/LOCAL_CLI_TEST_SUMMARY.md). Source dashboard, Supabase, dan workflow GitHub dari tahap sebelumnya masih ada di repo, tetapi tidak diperlukan untuk langkah terminal di atas.
+Untuk pengembang yang ingin memeriksa CLI, jalankan `pnpm test:cli` (memerlukan dependensi pengembangan) atau `node --test tests/local-cli.test.mjs tests/local-report.test.mjs tests/offline.test.mjs`.

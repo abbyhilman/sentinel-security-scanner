@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="1036" viewBox="0 0 920 1036" role="img" aria-labelledby="title desc">
+  <title id="title">Alur scan offline Sentinel di Windows</title>
+  <desc id="desc">Prepare menyiapkan cache. Doctor memverifikasi cache. Jika verifikasi gagal, jalankan prepare lagi. Scan offline memeriksa pola PHP, JavaScript dan TypeScript, indikasi secret dengan Gitleaks, dan advisory npm serta Composer dengan OSV. Hasilnya berupa laporan terminal dan JSON opsional.</desc>
+  <defs>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; fill: #102a43; text-anchor: middle; }
+      .heading { fill: #f8fafc; font-size: 36px; font-weight: 700; }
+      .subheading { fill: #aabacd; font-size: 19px; }
+      .box { fill: #fff4dd; stroke: #cebfa4; stroke-width: 1.5; rx: 5px; }
+      .retry { fill: #f4e5c7; }
+      .name { font-size: 24px; font-weight: 700; }
+      .copy { font-size: 17px; fill: #334155; }
+      .command { font-family: "JetBrains Mono", Consolas, monospace; font-size: 17px; }
+      .edge { fill: none; stroke: #8a9eb7; stroke-width: 2.5; stroke-linejoin: round; }
+      .label { fill: #b8c9db; font-size: 16px; }
+      .ok { fill: #79ded0; }
+      .footer { fill: #b8c9db; font-size: 16px; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#8a9eb7"/>
+    </marker>
+  </defs>
+
+  <rect width="920" height="1036" fill="#0f141b"/>
+  <text x="460" y="55" class="heading">Sentinel Security Scanner</text>
+  <text x="460" y="87" class="subheading">Alur scan offline di Windows · Python 3.10+</text>
+
+  <g class="edge" marker-end="url(#arrow)">
+    <path d="M460 198v29"/>
+    <path d="M460 309v30"/>
+    <path d="M460 415v43"/>
+    <path d="M573 378h71"/>
+    <path d="M752 344V157H661"/>
+    <path d="M460 548v49H173v40"/>
+    <path d="M460 548v89"/>
+    <path d="M460 597h287v40"/>
+    <path d="M173 723v43h287v38"/>
+    <path d="M460 723v81"/>
+    <path d="M747 723v43H460v38"/>
+  </g>
+
+  <rect x="260" y="116" width="400" height="82" class="box"/>
+  <text x="460" y="149" class="name">Siapkan cache saat online</text>
+  <text x="460" y="176" class="command">py -3 scanner.py prepare</text>
+
+  <rect x="260" y="227" width="400" height="82" class="box"/>
+  <text x="460" y="260" class="name">Periksa integritas cache</text>
+  <text x="460" y="287" class="command">py -3 scanner.py doctor</text>
+
+  <path d="M460 339 573 378 460 417 347 378z" fill="#fff4dd" stroke="#cebfa4" stroke-width="1.5"/>
+  <text x="460" y="384" class="copy">Cache valid?</text>
+  <text x="478" y="440" text-anchor="start" class="label ok" style="text-anchor:start">Ya</text>
+  <text x="609" y="365" class="label">Tidak</text>
+
+  <rect x="644" y="344" width="216" height="68" class="box retry"/>
+  <text x="752" y="372" class="name" style="font-size:20px">Perbarui cache</text>
+  <text x="752" y="394" class="copy">Jalankan prepare lagi</text>
+
+  <rect x="212" y="458" width="496" height="90" class="box"/>
+  <text x="460" y="494" class="name">Scan folder target</text>
+  <text x="460" y="522" class="command">py -3 scanner.py scan .\repo-demo --offline</text>
+
+  <rect x="50" y="637" width="246" height="86" class="box"/>
+  <text x="173" y="673" class="name">Pola source</text>
+  <text x="173" y="700" class="copy">PHP, JavaScript, TypeScript</text>
+
+  <rect x="337" y="637" width="246" height="86" class="box"/>
+  <text x="460" y="673" class="name">Gitleaks</text>
+  <text x="460" y="700" class="copy">Indikasi secret</text>
+
+  <rect x="624" y="637" width="246" height="86" class="box"/>
+  <text x="747" y="673" class="name">OSV-Scanner</text>
+  <text x="747" y="700" class="copy">Advisory npm dan Composer</text>
+
+  <rect x="180" y="804" width="560" height="137" class="box"/>
+  <text x="460" y="838" class="name">Laporan terminal dan JSON opsional</text>
+  <text x="460" y="865" class="copy">Status engine, temuan, kandidat versi perbaikan</text>
+  <path d="M206 886h508" stroke="#cebfa4"/>
+  <text x="460" y="916" class="copy">0 Tanpa temuan · 1 Perlu ditinjau · 2 Pemeriksaan gagal</text>
+
+  <text x="460" y="979" class="footer">Semgrep berstatus NOT_REQUESTED pada jalur Python.</text>
+  <text x="460" y="1006" class="footer">Audit dependency memakai advisory dari snapshot lokal.</text>
+</svg>
